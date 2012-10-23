@@ -4,31 +4,46 @@ import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.collection.mutable.WeakHashMap
 import npbayes.Utils
+import org.apache.commons.math3.special.Gamma
+
+
+abstract class HEURISTIC
+case object EXACT extends HEURISTIC
+case object MINPATH extends HEURISTIC
+case object MAXPATH extends HEURISTIC
+
+
+object distributions {
+  val ASSUMPTION: HEURISTIC = EXACT
+}
 
 trait Observation  {
   def label: String
 }
 
-class Word(val label: String) extends Observation {
+class Word(val label: String, val phones: Vector[Short]) extends Observation {
+  def + (that: Word) =
+    Word(this.phones.++(that.phones))
   override def toString = label
   def size = label.length
 }
 
 object Word {
   val symbolTable = npbayes.wordseg.data.SymbolTableString
-  implicit def string2Word(x: String) = Word(x)
+  implicit def string2Word(x: String) = 
+    new Word(x,Vector.empty.++(x.split(" ").map((x: String)=>symbolTable(x))))
   
   def constructWord(label: Vector[Short]): Word =
-    new Word(label.map((x: Short) => symbolTable(x)).mkString)
+    new Word(label.map((x: Short) => symbolTable(x)).mkString, label)
   
   
   val _Scache: WeakHashMap[String,Word] = new WeakHashMap
   val _Vcache: WeakHashMap[Vector[Short],Word] = new WeakHashMap
-  def apply(label: String): Word = _Scache.getOrElseUpdate(label, new Word(label))
   def apply(label: Vector[Short]): Word = _Vcache.getOrElseUpdate(label, constructWord(label))
 }
 
 trait PosteriorPredictive[T<: Observation] {
+  def logProb: Double = 0
   def apply(obs: T) = predProb(obs: T)
   def predProb (obs: T): Double
   def update (obs: T): Double
@@ -37,10 +52,20 @@ trait PosteriorPredictive[T<: Observation] {
 
 
 class Monkey[T<: Word](val nPhones: Int, val pStop: Double) extends PosteriorPredictive[T] {
+  var _logProb: Double = 0
   val _pPhon: Double = 1.0/nPhones
   val _norm = pStop/(1-pStop)
-  def remove(obs: T) = predProb(obs)
-  def update(obs: T) = predProb(obs)
+  override def logProb = _logProb
+  def remove(obs: T) = {
+    val res = predProb(obs)
+    _logProb -= math.log(res)
+    res
+  }
+  def update(obs: T) = {
+    val res = predProb(obs)
+    _logProb += math.log(res)
+    res
+  }
   def predProb(obs: T) = 
     math.pow(_pPhon*(1-pStop),obs.size)*_norm
 }
@@ -56,6 +81,20 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
   var _oCount = 0
   def _tCount(o: T): Int = hmTableCounts.getOrElse(o, 0)
   var _tCount = 0
+  
+  override def logProb = {
+    //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
+    var res = Gamma.logGamma(1+concentration)-Gamma.logGamma(_oCount+concentration)
+    for (w: T <- hmTables.keySet)
+      for (n_k <- hmTables(w))
+        res += (Gamma.logGamma(n_k-discount)-Gamma.logGamma(1-discount))
+    if (discount==0)
+      res += (_tCount-1)*math.log(concentration)
+    else
+      res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
+    		  Gamma.logGamma(concentration/discount))
+    res + base.logProb
+  }
   
   def _pSitAtOld(obs: T) =
     if (_oCount==0)
@@ -101,15 +140,18 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     res
   }
     
-  def _addCustomer (obs: T): Double = {
-    if (_random.nextDouble < _pSitAtOld(obs)) {
-      println("at old")
-      _seatAtOld(obs)
-    } else {
-      println("at new")
-      _seatAtNew(obs)
-    }
-  }
+  def _addCustomer (obs: T): Double = distributions.ASSUMPTION match  {
+    case EXACT =>   if (_random.nextDouble < _pSitAtOld(obs)) {
+    					_seatAtOld(obs)
+    				} else {
+    					_seatAtNew(obs)
+    				}
+    case MINPATH => if (_pSitAtOld(obs)==0)	
+    					_seatAtNew(obs)
+    				else
+    					_seatAtOld(obs)
+    case MAXPATH => _seatAtNew(obs)
+  } 
   
   def predProb(obs: T) =
 	_pSitAtOld(obs)+_pSitAtNew(obs)
