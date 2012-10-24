@@ -5,7 +5,38 @@ import scala.util.Random
 import scala.collection.mutable.WeakHashMap
 import npbayes.Utils
 import org.apache.commons.math3.special.Gamma
+import scala.collection.mutable.LinkedList
 
+
+class Categorical[T] {
+  var outcomes: List[(T,Double)] = List.empty
+  var partition: Double = 0
+  
+  def add(event: T, prob: Double): Unit = {
+    outcomes = outcomes:+((event,prob))
+    partition += prob
+  }
+  
+  override def toString = {
+    var res=""
+    for ((out,prob) <- outcomes)
+      res+=out+" "+prob/partition+"\n"
+    res
+  }
+  
+  def sample: T = {
+    def inner(events: List[(T,Double)],cur: Double,flip: Double): T = events match {
+      case List() => throw new Error("Categorical.sample: couldn't produce sample")
+      case (res,prob)::tail => {
+        if (flip<=cur+prob)
+          res
+        else
+          inner(tail,cur+prob,flip)
+      }
+    }
+    inner(outcomes,0,distributions.RANDOM.nextDouble*partition)
+  }
+}
 
 abstract class HEURISTIC
 case object EXACT extends HEURISTIC
@@ -15,6 +46,7 @@ case object MAXPATH extends HEURISTIC
 
 object distributions {
   val ASSUMPTION: HEURISTIC = EXACT
+  val RANDOM: Random = new Random()
 }
 
 trait Observation  {
@@ -25,21 +57,49 @@ class Word(val label: String, val phones: Vector[Short]) extends Observation {
   def + (that: Word) =
     Word(this.phones.++(that.phones))
   override def toString = label
-  def size = label.length
+  def size = phones.size
+  
+  def equals(obj: Word) = 
+      phones==obj.phones
+  
+  override def hashCode = phones.hashCode
 }
 
 object Word {
   val symbolTable = npbayes.wordseg.data.SymbolTableString
-  implicit def string2Word(x: String) = 
-    new Word(x,Vector.empty.++(x.split(" ").map((x: String)=>symbolTable(x))))
+  implicit def getWordOrConstruct(label: String) =  {
+    var res = _Scache.getOrElse(label,null)
+    if (res==null) {
+      res = new Word(label,Vector.empty.++(label.split(" ").map((x: String)=>symbolTable(x))))
+      _Scache(label)=res
+      _Vcache(res.phones)=res
+    }
+    res
+  }
   
-  def constructWord(label: Vector[Short]): Word =
-    new Word(label.map((x: Short) => symbolTable(x)).mkString, label)
+  implicit def getWordOrConstruct(label: Vector[Short]): Word = {
+    var res = _Vcache.getOrElse(label,null)
+    if (res==null) {
+    	res = new Word(label.map((x: Short) => symbolTable(x)).mkString(" "), label)
+    	_Vcache(label) = res
+    	_Scache(res.label) = res
+    }
+    res
+  }
   
   
   val _Scache: WeakHashMap[String,Word] = new WeakHashMap
   val _Vcache: WeakHashMap[Vector[Short],Word] = new WeakHashMap
-  def apply(label: Vector[Short]): Word = _Vcache.getOrElseUpdate(label, constructWord(label))
+  def apply(label: Vector[Short]): Word = {
+    val res = _Vcache.getOrElseUpdate(label, getWordOrConstruct(label))
+    _Scache(res.label) = res
+    res
+  }
+  def apply(label: String): Word = {
+    val res =_Scache.getOrElseUpdate(label, getWordOrConstruct(label))
+    _Vcache(res.phones)=res
+    res
+  }
 }
 
 trait PosteriorPredictive[T<: Observation] {
@@ -57,11 +117,13 @@ class Monkey[T<: Word](val nPhones: Int, val pStop: Double) extends PosteriorPre
   val _norm = pStop/(1-pStop)
   override def logProb = _logProb
   def remove(obs: T) = {
+//    println("Base-Remove: "+obs)
     val res = predProb(obs)
     _logProb -= math.log(res)
     res
   }
   def update(obs: T) = {
+//    println("Base-Update: "+obs)
     val res = predProb(obs)
     _logProb += math.log(res)
     res
@@ -71,7 +133,7 @@ class Monkey[T<: Word](val nPhones: Int, val pStop: Double) extends PosteriorPre
 }
 
 
-class CRP[T<: Observation](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T]) extends PosteriorPredictive[T] {
+class CRP[T<: Observation](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count
   val hmTableCounts: HashMap[T,Int] = new HashMap() //maps each observation to the number of tables
@@ -103,10 +165,11 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
       (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
       
   def _pSitAtNew(obs: T) =
-    if (_oCount==0)
+    if (_oCount==0) {
       base(obs)
-    else
+    } else {
       (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
+    }
   
   
   def _seatAtOld(obs: T): Double = {
@@ -114,12 +177,13 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     var current: Double = 0
     var i = 0
     var nCust = 0
-    println(sitAt)
+//    println("sit at old ("+_pSitAtOld(obs)/(_pSitAtOld(obs)+_pSitAtNew(obs))+" vs "+_pSitAtNew(obs)/(_pSitAtOld(obs)+_pSitAtNew(obs)))
+//    println("Prob-SitAt:"+sitAt)
     _oCount += 1
     while (true) {
       nCust = hmTables(obs)(i)
       current += (nCust-discount)
-      println(current)
+      //println(current)
       if (sitAt<=current) {
         Utils.incr(hmObsCounts, obs)
         hmTables(obs)=hmTables(obs).updated(i, nCust+1)
@@ -131,21 +195,29 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
   }
   
   def _seatAtNew(obs: T): Double = {
+//	println("sit at new ("+_pSitAtNew(obs)/(_pSitAtOld(obs)+_pSitAtNew(obs))+" vs "+_pSitAtOld(obs)/(_pSitAtOld(obs)+_pSitAtNew(obs)))
     Utils.incr(hmObsCounts, obs)
     Utils.incr(hmTableCounts,obs)
     hmTables(obs) = hmTables.getOrElse(obs, Vector.empty):+1
     val res = _pSitAtNew(obs)
+    base.update(obs)
     _oCount += 1
     _tCount += 1
     res
   }
     
-  def _addCustomer (obs: T): Double = distributions.ASSUMPTION match  {
-    case EXACT =>   if (_random.nextDouble < _pSitAtOld(obs)) {
-    					_seatAtOld(obs)
-    				} else {
-    					_seatAtNew(obs)
-    				}
+  def _addCustomer (obs: T): Double = assumption match  {
+    case EXACT =>   { 
+      val oldT = _pSitAtOld(obs)
+      val newT = _pSitAtNew(obs)
+      val p=_random.nextDouble*(oldT+newT)
+//      println(p)      
+	  if (p <= oldT) {
+		_seatAtOld(obs)
+	  } else {
+		_seatAtNew(obs)
+	  }
+    }
     case MINPATH => if (_pSitAtOld(obs)==0)	
     					_seatAtNew(obs)
     				else
@@ -153,8 +225,11 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     case MAXPATH => _seatAtNew(obs)
   } 
   
-  def predProb(obs: T) =
-	_pSitAtOld(obs)+_pSitAtNew(obs)
+  def predProb(obs: T) = {
+//	  println("get prob for "+obs+": "+(_pSitAtOld(obs)+_pSitAtNew(obs)).toString)
+	  _pSitAtOld(obs)+_pSitAtNew(obs)    
+  }
+	
     
   def update (obs: T) =
   	_addCustomer(obs)    
@@ -163,12 +238,13 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     var current=0
     var i=0
     var nCust=0
+//    println("Remove-Element:"+obs)
     val removeFrom = _random.nextInt(_oCount(obs))
-    println(removeFrom)
+//    println("Remove from:"+removeFrom)
     while (true) {
       nCust = hmTables(obs)(i)
       current += nCust
-      println(current)
+      //println(current)
       if (removeFrom<=current) {
         Utils.decr(hmObsCounts,obs)
         _oCount-=1
@@ -176,6 +252,12 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
           _tCount-=1
           Utils.decr(hmTableCounts,obs)
           base.remove(obs)
+          if (_oCount(obs)==0)
+            hmTables.remove(obs)
+          else
+            hmTables(obs)=hmTables(obs).take(i)++hmTables(obs).drop(i+1)
+        } else {
+          hmTables(obs)=hmTables(obs).updated(i, nCust-1)
         }
         return predProb(obs) //overall probability of adding back in
       }
