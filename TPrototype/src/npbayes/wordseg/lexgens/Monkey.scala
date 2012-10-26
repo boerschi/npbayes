@@ -1,9 +1,9 @@
 package npbayes.wordseg.lexgens
 
 import npbayes.distributions.PosteriorPredictive
-import npbayes.wordseg.data.Word
+import npbayes.wordseg.data.WordType
 
-class Monkey[T<: Word](val nPhones: Int, val pStop: Double) extends PosteriorPredictive[T] {
+class Monkey[T<: WordType](val nPhones: Int, val pStop: Double) extends PosteriorPredictive[T] {
   var _logProb: Double = 0
   val _pPhon: Double = 1.0/nPhones
   val _norm = pStop/(1-pStop)
