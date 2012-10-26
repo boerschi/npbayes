@@ -1,18 +1,30 @@
 package npbayes
+/**
+ * convenience functions
+ */
 
 import scala.collection.mutable.HashMap
 
 object Utils {
-	def decr[T](hm: HashMap[T,Int], key: T) = {
+  
+    /**
+     * decrements the integer-value of key by step (default=1) and
+     * drops key from the map if the value drops to or below 0
+     */
+	def decr[T](hm: HashMap[T,Int], key: T, step: Int = 1): Unit = {
 	  val old = hm(key)
-	  if (old-1==0)
+	  if (old-step<=0)
 	    hm.remove(key)
 	  else
-	    hm(key) = old-1
+	    hm(key) = old-step
 	}
 	
-	def incr[T](hm: HashMap[T,Int], key: T) = {
-	  val old = hm.getOrElse(key, 0)
-	  hm(key) = old+1
-	}
+	/**
+	 * increments the integer-value of key by step (default=1) and
+	 * ensures that a new key-value pair is added if key is not
+	 * yet present
+	 */
+	def incr[T](hm: HashMap[T,Int], key: T, step: Int = 1): Unit = 
+	  hm(key) = hm.getOrElse(key, 0)+step
+	
 }

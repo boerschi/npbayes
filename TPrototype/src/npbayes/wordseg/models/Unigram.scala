@@ -6,14 +6,14 @@ package npbayes.wordseg.models
 
 import npbayes.distributions._
 import npbayes.wordseg.data._
-import npbayes.wordseg.data.WBoundaryNodrop
+import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
 
 class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val assumption: HEURISTIC = EXACT,val dropProb: Double =0.0) {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0
-	val data = new VarData(corpusName,dropProb,"*","t")
+	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
 	val pypUni = new CRP[Word](concentration,discount,new Monkey(data.symbolTable.nSymbols,0.5),assumption)
 	var nUtterances = 0
 
@@ -65,13 +65,15 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	}
 	      	case UBoundaryDrop => {
 	      	  update(Word(_phoneSeq.slice(sPos-1, cPos).:+(symbolTable(DROPSYMBOL))))
- 	      	  inner(remData.tail,cPos+1,cPos+1)
  	      	  nUtterances+=1
+	      	  inner(remData.tail,cPos+1,cPos+1)
+ 	      	  
 	      	}
 	      	case UBoundaryNodrop => {
 	      	  update(Word(_phoneSeq.slice(sPos-1, cPos)))
- 	      	  inner(remData.tail,cPos+1,cPos+1)
  	      	  nUtterances+=1
+	      	  inner(remData.tail,cPos+1,cPos+1)
+ 	      	  
 	      	}
 	  }
 	  if (gold)

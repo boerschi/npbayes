@@ -1,6 +1,6 @@
 package npbayes.wordseg.data
 
-import npbayes.distributions.{Word,CRP}
+import npbayes.distributions.CRP
 import java.io._
 import scala.collection.mutable.HashMap
 import scala.io.Source
