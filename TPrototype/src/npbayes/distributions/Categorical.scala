@@ -23,7 +23,21 @@ class Categorical[T] {
     res
   }
   
-  def sample: T = {
+  def sample: T =
+    Categorical.sample(outcomes, partition)(Categorical.unif.nextDouble)
+  
+  
+  def sample(anneal: Double): T = {
+    val annealed = outcomes.map(x=>(x._1,math.pow(x._2, anneal)))
+    val part = annealed.map(x=>x._2).sum
+    Categorical.sample(annealed,part)(Categorical.unif.nextDouble)
+  }
+}
+
+object Categorical {
+  val unif = new scala.util.Random()
+  
+  def sample[T](outcomes: List[(T,Double)],partition: Double)(flip: Double) = {
     def inner(events: List[(T,Double)],cur: Double,flip: Double): T = events match {
       case List() => throw new Error("Categorical.sample: couldn't produce sample")
       case (res,prob)::tail => {
@@ -35,8 +49,4 @@ class Categorical[T] {
     }
     inner(outcomes,0,Categorical.unif.nextDouble*partition)
   }
-}
-
-object Categorical {
-  val unif = new scala.util.Random()
 }

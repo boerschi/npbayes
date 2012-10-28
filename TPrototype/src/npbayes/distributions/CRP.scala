@@ -14,7 +14,7 @@ case object EXACT extends HEURISTIC
 case object MINPATH extends HEURISTIC
 case object MAXPATH extends HEURISTIC
 
-class CRP[T<: Observation](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
+class CRP[T](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count
   val hmTableCounts: HashMap[T,Int] = new HashMap() //maps each observation to the number of tables
@@ -25,6 +25,17 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
   def _tCount(o: T): Int = hmTableCounts.getOrElse(o, 0)
   var _tCount = 0
   
+  /**
+   * predictive probability, taking into account the additional
+   * observation prev
+   */
+  def apply(obs: T,prev: T) = {
+    update(prev)
+    val res=predProb(obs)
+    remove(prev)
+    res
+  }
+  
   override def logProb = {
     //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
     var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
@@ -32,7 +43,7 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
       for ((nC: Int,nT: Int) <- hmTables(w))
         res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
     if (discount==0)
-      res += (_tCount-1)*math.log(concentration)
+      res += _tCount*math.log(concentration)
     else
       res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
     		  Gamma.logGamma(concentration/discount))
@@ -81,10 +92,10 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     res
   }
     
-  def _addCustomer (obs: T): Double = {
+  def update (obs: T): Double = {
     _oCount += 1
     assumption match  {
-    case EXACT =>   { 
+     case EXACT =>   { 
       val oldT = _pSitAtOld(obs)
       val newT = _pSitAtNew(obs)
       val p=_random.nextDouble*(oldT+newT)
@@ -93,23 +104,22 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
 	  } else {
 		_seatAtNew(obs)
 	  }
-    }
-    case MINPATH => if (_pSitAtOld(obs)==0)	
+     }
+     case MINPATH => if (_pSitAtOld(obs)==0)	
     					_seatAtNew(obs)
     				else
     					_seatAtOld(obs)
-    case MAXPATH => _seatAtNew(obs)
-  } 
+     case MAXPATH => _seatAtNew(obs)
+    } 
   }
   
   def predProb(obs: T) = {
-//	  println("get prob for "+obs+": "+(_pSitAtOld(obs)+_pSitAtNew(obs)).toString)
 	  _pSitAtOld(obs)+_pSitAtNew(obs)    
   }
 	
     
-  def update (obs: T) =
-  	_addCustomer(obs)    
+    
+  
   
   def remove (obs: T): Double = {
 	def inner(seating: HashMap[Int,Int],removeFrom: Int,current: Int=0): Unit = 
@@ -130,31 +140,5 @@ class CRP[T<: Observation](val concentration: Double, val discount: Double, val 
     Utils.decr(hmObsCounts,obs)
     _oCount-=1
     predProb(obs)
-/*    while (true) {
-      nCust = hmTables(obs)(i)
-      current += nCust
-      //println(current)
-      if (removeFrom<=current) {
-        Utils.decr(hmObsCounts,obs)
-        _oCount-=1
-        if (nCust-1==0) {
-          _tCount-=1
-          Utils.decr(hmTableCounts,obs)
-          base.remove(obs)
-          if (_oCount(obs)==0)
-            hmTables.remove(obs)
-          else
-            //hmTables(obs)=hmTables(obs).take(i)++hmTables(obs).drop(i+1)
-            hmTables(obs) = hmTables(obs).take(i-1).append(hmTables(obs).drop(i+1))
-        } else {
-          hmTables(obs)(i)=nCust-1
-          //=hmTables(obs).updated(i, nCust-1)
-        }
-        return predProb(obs) //overall probability of adding back in
-      }
-      i+=1
-    }
-    throw new Error("remove "+obs)  
-*/
   }
   }

@@ -14,24 +14,17 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
-	val pypUni = new CRP[WordType](concentration,discount,new Monkey(data.symbolTable.nSymbols,0.5),assumption)
+	val pypUni = new CRP[WordType](concentration,discount,new Monkey(SymbolTableString.nSymbols,0.5),assumption)
 	var nUtterances = 0
 
-	// local aliases
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
-	def update(obs: WordType) = {
-//	  println("add "+obs+" before: "+pypUni._oCount(obs))
-	  pypUni.update(obs)
-//	  println("add "+obs+" after: "+pypUni._oCount(obs))
-	}
-	def remove(obs: WordType) = {
-//	  println("remove "+obs+" before: "+pypUni._oCount(obs))
-	  pypUni.remove(obs)
-//	  println("remove "+obs+" after: "+pypUni._oCount(obs))
-	}
-	def toSurface(underlying: WordType, surface: WordType) = data.R(underlying, surface)
-	def symbolTable = data.symbolTable
+
+	def update: (WordType=>Double) = pypUni.update
+
+	def remove: (WordType=>Double)= pypUni.remove
+
+	def toSurface: ((WordType,WordType)=>Double) = data.R
 	def DROPSYMBOL = data.DROPSYMBOL
 	def _phoneSeq = data.data
 	
@@ -40,7 +33,6 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 * returns the probability for generating an utterance final word
 	 */
 	def _predBoundary(add: Int=0) = {
-//	  println("utts: "+nUtterances+"\ntoks: "+nTokens)
 	  (nUtterances+betaUB/2.0)/(nTokens+betaUB+add)
 	}
 	  
@@ -49,37 +41,55 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 * initializes the CRP with the counts
 	 */
 	def init(gold:Boolean = false) = {
-	  def inner(remData: Vector[Boundary],sPos: Int,cPos: Int): Unit = 
-	    if (remData.size==0)
+	  def inner(sPos: Int,cPos: Int): Unit = 
+	    if (cPos>=boundaries.size)
 	      Unit
 	    else 
-	      remData.head match {
-	      	case NoBoundary => inner(remData.tail,sPos,cPos+1)
+	      boundaries(cPos) match {
+	      	case NoBoundary => inner(sPos,cPos+1)
 	      	case WBoundaryDrop => {
- 	      	  update(WordType(_phoneSeq.slice(sPos-1, cPos).:+(symbolTable(DROPSYMBOL))))
- 	      	  inner(remData.tail,cPos+1,cPos+1)
+ 	      	  update(_phoneSeq.slice(sPos-1, cPos):+(data.DROPSEG))
+ 	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case WBoundaryNodrop => {
-	      	  update(WordType(_phoneSeq.slice(sPos-1, cPos)))
- 	      	  inner(remData.tail,cPos+1,cPos+1)
+	      	  update(_phoneSeq.slice(sPos-1, cPos))
+ 	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundaryDrop => {
-	      	  update(WordType(_phoneSeq.slice(sPos-1, cPos).:+(symbolTable(DROPSYMBOL))))
+	      	  update(_phoneSeq.slice(sPos-1, cPos):+data.DROPSEG)
  	      	  nUtterances+=1
-	      	  inner(remData.tail,cPos+1,cPos+1)
+	      	  inner(cPos+1,cPos+1)
  	      	  
 	      	}
 	      	case UBoundaryNodrop => {
-	      	  update(WordType(_phoneSeq.slice(sPos-1, cPos)))
+	      	  update(_phoneSeq.slice(sPos-1, cPos))
  	      	  nUtterances+=1
-	      	  inner(remData.tail,cPos+1,cPos+1)
- 	      	  
+	      	  inner(cPos+1,cPos+1)
 	      	}
 	  }
 	  if (gold)
 	    data.boundaries=data.goldBoundaries
-	  inner(data.boundaries.tail,1,1)
+	  inner(1,1)
 	}	
+	
+	
+	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, isFinal: Boolean) = 
+	  pypUni(w1w2Under)*
+	  toSurface(w1w2Under,w1w2Obs)*
+	  {if (isFinal) _predBoundary() else (1-_predBoundary())}
+	
+	    
+	/**
+	 * whether or not a drop occured is handled fully by what you pass
+	 */
+	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, isFinal: Boolean) =
+	  pypUni(w1Under)*
+	  toSurface(w1Under,w1Obs)*
+	  (1-_predBoundary())*
+	  pypUni(w2Under,w1Under)*
+	  toSurface(w2Under,w2Obs)*
+	  {if (isFinal) _predBoundary(1) else (1-_predBoundary(1))}
+
 	
 	/**
 	 * returns a distribution over all possible ways to resample
@@ -87,52 +97,25 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 */
 	def _calcHypotheses(context: Context): Categorical[Boundary] = {
 	  val res: Categorical[Boundary] = new Categorical
-	  val isFinalWord = context.right==WordType(data.DROPSYMBOL)
-	  
-	  val contProb1Word = 
-	    if (isFinalWord)
-	      _predBoundary(0)
-	    else
-	      (1-_predBoundary(0))  
-	  
-	  val contProb2Words = (1-_predBoundary(0))
-	  val endProb2Words =
-	    if (isFinalWord)
-	      _predBoundary(1)
-	    else
-	      (1-_predBoundary(1))
-	  
-//	  println("pNoBound="+pypUni(context.w1Observed+context.w2Underlying)+"*"+contProb1Word+"*"+
-//	    toSurface(context.w1Observed+context.w2Underlying,context.w1Observed+context.w2Observed))
-//	  println(context.w1Observed.toString+context.w2Underlying.toString+"-->"+context.w1Observed.toString+context.w2Observed.toString)
-	  val probNoBoundary =
-	    pypUni(context.w1Observed+context.w2Underlying)*contProb1Word*
-	    toSurface(context.w1Observed+context.w2Underlying,context.w1Observed+context.w2Observed)
-	  val probBoundaryDrop =
-	    pypUni(context.w1Observed+WordType(data.DROPSYMBOL))*contProb2Words*
-	    pypUni(context.w2Underlying)*endProb2Words*
-	    toSurface(context.w1Observed+WordType(data.DROPSYMBOL),context.w1Observed)*
-	    toSurface(context.w2Underlying,context.w2Observed)
-	  val probBoundaryNodrop =
-	    pypUni(context.w1Observed)*contProb2Words*
-	    pypUni(context.w2Underlying)*endProb2Words*
-	    toSurface(context.w1Observed,context.w1Observed)*
-	    toSurface(context.w2Underlying,context.w2Observed)
-	  res.add(NoBoundary,probNoBoundary)
-	  res.add(WBoundaryDrop,probBoundaryDrop)
-	  res.add(WBoundaryNodrop,probBoundaryNodrop)
+	  val isFinalWord = context.right==data.UBOUNDARYWORD
+	  res.add(NoBoundary,
+	      _noBoundary(context.w1w2Underlying,context.w1w2Observed,isFinalWord))
+	  res.add(WBoundaryDrop,
+	      _boundary(context.w1WithDrop,context.w2Underlying,context.w1Observed,context.w2Observed,isFinalWord))
+	  res.add(WBoundaryNodrop,
+	      _boundary(context.w1Observed,context.w2Underlying,context.w1Observed,context.w2Observed,isFinalWord))
 	  assert(res.partition>0)
 	  return res
 	}
 	
 	def updateBoundary(pos: Int, b: Boundary, context: Context) = {
 	  data.setBoundary(pos, b)
-	  if (context.right==WordType(data.UBOUNDARYSYMBOL))
+	  if (context.right==data.UBOUNDARYWORD)
 	    nUtterances+=1
 	  b match {
-	    case NoBoundary => update(context.w1Observed+context.w2Underlying)
+	    case NoBoundary => update(context.w1w2Underlying)
 	    case WBoundaryDrop => {
-	      update(context.w1Observed+WordType(data.DROPSYMBOL))
+	      update(context.w1WithDrop)
 	      update(context.w2Underlying)
 	    }
 	    case WBoundaryNodrop => {
@@ -142,12 +125,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  }
 	}
 	
-	def resample(pos: Int): Unit = {  
+	def resample(pos: Int, anneal: Double=1.0): Unit = {  
 	  boundaries(pos) match {
 	    case UBoundaryDrop | UBoundaryNodrop => Unit
 	    case _ => {
 	      val context = data.context(pos)
-	      if (context.right==WordType(data.UBOUNDARYSYMBOL))
+	      if (context.right==data.UBOUNDARYWORD)
 	      	nUtterances-=1	      
 	      boundaries(pos) match {
 	        case WBoundaryDrop | WBoundaryNodrop => {
@@ -155,17 +138,20 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	          remove(context.w2Underlying)
 	        }
 	        case _ => {
-	          remove(context.w1Observed+context.w2Underlying)
+	          remove(context.w1Observed++context.w2Underlying)
 	        }  
 	      }
 	      val result = _calcHypotheses(context)
-	      updateBoundary(pos, result.sample,context)
+	      if (anneal==1.0)
+	        updateBoundary(pos, result.sample,context)
+	      else
+	        updateBoundary(pos, result.sample(anneal),context)
 	    }
 	  }}
 	
-	def gibbsSweep(): Double = {
+	def gibbsSweep(anneal: Double=1.0): Double = {
 	  for (i: Int <- shuffle(0 until boundaries.size)) 
-		  resample(i)
+		  resample(i,anneal)
 	  pypUni.logProb
 	}
 }
