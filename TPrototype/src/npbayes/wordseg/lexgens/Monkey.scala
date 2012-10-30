@@ -3,7 +3,7 @@ package npbayes.wordseg.lexgens
 import npbayes.distributions.PosteriorPredictive
 import npbayes.wordseg.data.WordType
 
-class Monkey[T<: WordType](val nPhones: Int, val pStop: Double) extends PosteriorPredictive[T] {
+class Monkey[T<:WordType](val nPhones: Int, val pStop: Double,val UB: T=null, val pUB: Double=0.5) extends PosteriorPredictive[T] {
   var _logProb: Double = 0
   val _pPhon: Double = 1.0/nPhones
   val _norm = pStop/(1-pStop)
@@ -19,5 +19,11 @@ class Monkey[T<: WordType](val nPhones: Int, val pStop: Double) extends Posterio
     res
   }
   def predProb(obs: T) = 
-    math.pow(_pPhon*(1-pStop),obs.size)*_norm
+    if (UB==null)
+      math.pow(_pPhon*(1-pStop),obs.size)*_norm
+    else
+      if (obs==UB)
+        pUB
+      else
+        (1-pUB)*math.pow(_pPhon*(1-pStop),obs.size)*_norm
 }

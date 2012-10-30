@@ -8,6 +8,7 @@ import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
+import com.google.common.collect.ImmutableList.Builder
 
 class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val assumption: HEURISTIC = EXACT,val dropProb: Double =0.0) {
 	require(0<=discount && discount<1)
@@ -48,27 +49,27 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      boundaries(cPos) match {
 	      	case NoBoundary => inner(sPos,cPos+1)
 	      	case WBoundaryDrop => {
- 	      	  update(_phoneSeq.slice(sPos-1, cPos):+(data.DROPSEG))
+ 	      	  update(new Builder[Int].addAll(_phoneSeq.subList(sPos-1, cPos)).add(data.DROPSEG).build)
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case WBoundaryNodrop => {
-	      	  update(_phoneSeq.slice(sPos-1, cPos))
+	      	  update(_phoneSeq.subList(sPos-1, cPos))
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundaryDrop => {
-	      	  update(_phoneSeq.slice(sPos-1, cPos):+data.DROPSEG)
+	      	  update(new Builder[Int].addAll(_phoneSeq.subList(sPos-1, cPos)).add(data.DROPSEG).build)
  	      	  nUtterances+=1
 	      	  inner(cPos+1,cPos+1)
  	      	  
 	      	}
 	      	case UBoundaryNodrop => {
-	      	  update(_phoneSeq.slice(sPos-1, cPos))
+	      	  update(_phoneSeq.subList(sPos-1, cPos))
  	      	  nUtterances+=1
 	      	  inner(cPos+1,cPos+1)
 	      	}
 	  }
 	  if (gold)
-	    data.boundaries=data.goldBoundaries
+	    data.boundaries=data.goldBoundaries.clone
 	  inner(1,1)
 	}	
 	

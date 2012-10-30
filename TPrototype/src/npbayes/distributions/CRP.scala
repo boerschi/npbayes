@@ -14,6 +14,36 @@ case object EXACT extends HEURISTIC
 case object MINPATH extends HEURISTIC
 case object MAXPATH extends HEURISTIC
 
+object CRP {
+  	def seatAt(seating: HashMap[Int,Int],tableSize: Int) = {
+	  if (tableSize==0)
+	    seating(1)=seating.getOrElse(1,0)+1
+	  else {
+		  val oneLessTS = seating(tableSize)-1
+		  if (oneLessTS==0)
+			seating.remove(tableSize)
+		  else
+		    seating(tableSize)=oneLessTS
+		  seating(tableSize+1)=seating.getOrElse(tableSize+1,0)+1
+	  }
+	}
+	
+	def removeFrom(seating: HashMap[Int,Int],tableSize: Int): Boolean = {
+	  val oneLessTS = seating(tableSize)-1
+	  if (oneLessTS==0) {
+	    seating.remove(tableSize)
+	  }
+	  else {
+	    seating(tableSize)=oneLessTS
+	  }
+	  if (tableSize>1) {
+	    seating(tableSize-1)=seating.getOrElse(tableSize-1,0)+1
+	    false
+	  } else
+		true
+	}
+}
+
 class CRP[T](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count
@@ -87,7 +117,7 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
       else {
         val (tableSize,nTables) = seating.head
         if (sitAt<=current+tableSize*nTables-discount*nTables) {
-          wordseg.seatAt(hmTables(obs),tableSize)
+          CRP.seatAt(hmTables(obs),tableSize)
           tableSize
         }
         else
@@ -101,7 +131,7 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
   def _seatAtNew(obs: T): Double = {
     Utils.incr(hmObsCounts, obs)
     Utils.incr(hmTableCounts,obs)
-    wordseg.seatAt(hmTables.getOrElseUpdate(obs, new HashMap()),0)
+    CRP.seatAt(hmTables.getOrElseUpdate(obs, new HashMap()),0)
     val res = _pSitAtNew(obs)
     base.update(obs)
     _tCount += 1
@@ -144,7 +174,7 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
       else {
         val (tableSize,nTables) = seating.head
         if (removeFrom<=current+tableSize*nTables) {
-          if (wordseg.removeFrom(hmTables(obs),tableSize)) {
+          if (CRP.removeFrom(hmTables(obs),tableSize)) {
             _tCount -=1
             base.remove(obs)
           }

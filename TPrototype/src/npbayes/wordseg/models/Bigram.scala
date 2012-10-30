@@ -13,7 +13,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
-	val pypUni = new CRP[WordType](concentrationUni,discountUni,new Monkey(SymbolTableString.nSymbols,0.5),assumption)
+	val pypUni = new CRP[WordType](concentrationUni,discountUni,new Monkey(SymbolTableString.nSymbols,0.5,data.UBOUNDARYWORD,0.5),assumption)
 	val biEmpty = new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
 	var nUtterances = 0
@@ -70,7 +70,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      	}
 	  }
 	  if (gold)
-	    data.boundaries=data.goldBoundaries
+	    data.boundaries=data.goldBoundaries.clone
 	  inner(1,1)
 	}	
 	
