@@ -23,20 +23,36 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
   def _oCount(o: T): Int = hmObsCounts.getOrElse(o, 0)
   var _oCount = 0
   def _tCount(o: T): Int = hmTableCounts.getOrElse(o, 0)
+  
+  
   var _tCount = 0
   
   /**
    * predictive probability, taking into account the additional
    * observation prev
    */
-  def apply(obs: T,prev: T) = {
-    update(prev)
+  def apply(obs: T,prevs: List[T]) = {
+    for (prev <- prevs)
+      update(prev)
     val res=predProb(obs)
-    remove(prev)
+    for (prev <- prevs)
+      remove(prev)
     res
   }
   
+  def isEmpty: Boolean = _oCount==0
+  
+  /**
+   * full logProb, including base-distribution
+   */
   override def logProb = {
+    logProbSeating + base.logProb
+  }
+  
+  /**
+   * just the seating-arrangement
+   */
+  def logProbSeating: Double = {
     //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
     var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
     for (w: T <- hmTables.keySet)
@@ -47,7 +63,7 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     else
       res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
     		  Gamma.logGamma(concentration/discount))
-    res + base.logProb
+    res
   }
   
   def _pSitAtOld(obs: T) =

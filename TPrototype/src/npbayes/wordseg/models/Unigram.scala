@@ -86,7 +86,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  pypUni(w1Under)*
 	  toSurface(w1Under,w1Obs)*
 	  (1-_predBoundary())*
-	  pypUni(w2Under,w1Under)*
+	  pypUni(w2Under,List(w1Under))*
 	  toSurface(w2Under,w2Obs)*
 	  {if (isFinal) _predBoundary(1) else (1-_predBoundary(1))}
 
@@ -138,7 +138,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	          remove(context.w2Underlying)
 	        }
 	        case _ => {
-	          remove(context.w1Observed++context.w2Underlying)
+	          remove(context.w1w2Underlying)
 	        }  
 	      }
 	      val result = _calcHypotheses(context)

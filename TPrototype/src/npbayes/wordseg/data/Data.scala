@@ -7,6 +7,8 @@ import scala.io.Source
 import scala.util.Random
 import npbayes.wordseg.models.Unigram
 import scala.collection.mutable.StringBuilder
+import com.google.common.collect.ImmutableList
+
 
 abstract class Boundary
 case object NoBoundary extends Boundary
@@ -131,7 +133,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 
 	def getLeftWord(pos: Int): (WordType, WordType, WordType) = 
 	  if (pos==0 || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-			(UBOUNDARYWORD,null,null)
+			(UBOUNDARYWORD,UBOUNDARYWORD,UBOUNDARYWORD)
 	  else {
 		  val res: WordType =  data.slice(bToLeft(pos-1), pos)
 		  val resWithDrop = res:+DROPSEG
@@ -145,7 +147,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 			
 	
 	def getRightWord(pos: Int): (WordType,WordType) = if (pos==(boundaries.size-1) || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-			(UBOUNDARYWORD,null)
+			(UBOUNDARYWORD,UBOUNDARYWORD)
 		else {
 		  val end=bToRight(pos+1)
 		  val res: WordType=data.slice(pos,end)
@@ -172,6 +174,31 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	}
 	
 
+	/**
+	 * get all the tokens associated with a certain boundary to the left
+	 * for bigram initialization
+	 *    
+	 */
+	def contextLeft(pos: Int): Context = {
+		val w1Start = bToLeft(pos-1)
+		val res = data.slice(w1Start, pos)
+		val resWithDrop = res:+DROPSEG
+		boundaries(pos) match {	
+		  	case UBoundaryDrop => {  
+		  	  val (w1Underlying,w1Observed,w1WithT)=(resWithDrop,res,resWithDrop)
+		  	  val (w2Underlying,w2Observed) = getRightWord(pos)
+		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
+		  			  null,null,null)}		  	  
+		  	case UBoundaryNodrop => {
+		  	  val (w1Underlying,w1Observed,w1WithT)=(res,res,resWithDrop)
+		  	  val (w2Underlying,w2Observed) = getRightWord(pos)
+		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
+		  			  null,null,null)}		  	  
+		  	case _ =>
+		  	  throw new Error("contextLeft only applicable for Boundary-positions")
+		}
+	}
+	
 	def getAnalysis: String = {
 	  def inner(sPos: Int,cPos: Int,res: StringBuilder): String = 
 	    if (cPos>=boundaries.size)
