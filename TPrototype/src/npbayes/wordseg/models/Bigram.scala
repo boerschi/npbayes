@@ -4,8 +4,17 @@ import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
-import scala.dbc.statement.expression.Default
 import scala.collection.mutable.HashMap
+
+abstract class BContext
+
+case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
+					  val w2O: WordType, val w2U: WordType,
+					  val w1w2O: WordType, val w1w2U: WordType,
+					  val rightU: WordType) extends BContext
+
+case class BigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordType) extends BContext					  
+
 
 
 class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val assumption: HEURISTIC = EXACT,val dropProb: Double =0.0) {
@@ -13,7 +22,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
-	val pypUni = new CRP[WordType](concentrationUni,discountUni,new Monkey(SymbolTableString.nSymbols,0.5,data.UBOUNDARYWORD,0.5),assumption)
+	val pypUni = new CRP[WordType](concentrationUni,discountUni,new Monkey(SymbolTable.nSymbols,0.5,data.UBOUNDARYWORD,0.5),assumption)
 	val biEmpty = new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
 	var nUtterances = 0
@@ -24,10 +33,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def update(precedingW: WordType): (WordType=>Double) = 
 	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)).update
 
-	def remove(precedingW: WordType): (WordType=>Double)= 
-	  pypBis(precedingW).remove
-	
 	def removeWrap(precedingW: WordType, word: WordType) = {
+	  def remove(precedingW: WordType): (WordType=>Double)= 
+	    pypBis(precedingW).remove
 	  remove(precedingW)(word)
 	  if (pypBis(precedingW).isEmpty)
 	    pypBis.remove(precedingW)
@@ -37,13 +45,6 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def DROPSYMBOL = data.DROPSYMBOL
 	def _phoneSeq = data.data
 	
-	
-	/**
-	 * returns the probability for generating an utterance final word
-	 */
-	def _predBoundary(add: Int=0) = {
-	  (nUtterances+betaUB/2.0)/(nTokens+betaUB+add)
-	}
 	  
 	
 	/**
@@ -138,13 +139,13 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      	nUtterances-=1	      
 	      boundaries(pos) match {
 	        case WBoundaryDrop | WBoundaryNodrop => {
-	          remove(context.left)(context.w1Underlying)
-	          remove(context.w1Underlying)(context.w2Underlying)
-	          remove(context.w2Underlying)(context.right)
+	          removeWrap(context.left,context.w1Underlying)
+	          removeWrap(context.w1Underlying,context.w2Underlying)
+	          removeWrap(context.w2Underlying,context.right)
 	        }
 	        case _ => {
-	          remove(context.left)(context.w1w2Underlying)
-	          remove(context.w1w2Underlying)(context.right)
+	          removeWrap(context.left,context.w1w2Underlying)
+	          removeWrap(context.w1w2Underlying,context.right)
 	        }  
 	      }
 	      val result = _calcHypotheses(context)

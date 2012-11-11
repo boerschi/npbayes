@@ -8,19 +8,18 @@ import scala.io.Source
 import scala.util.Random
 import npbayes.wordseg.models.Unigram
 import scala.collection.mutable.StringBuilder
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableList.Builder
 import java.util.Arrays
 
 
 abstract class Boundary
 case object NoBoundary extends Boundary
-case class WBoundary extends Boundary
-case object WBoundaryDrop extends WBoundary
+case object WBoundaryDrop extends Boundary
 case object WBoundaryNodrop extends Boundary
-case class UBoundary extends Boundary
-case object UBoundaryDrop extends UBoundary
-case object UBoundaryNodrop extends UBoundary
+case object UBoundaryDrop extends Boundary
+case object UBoundaryNodrop extends Boundary
+
+
 
 class Context(val left: WordType,val w1Underlying: WordType, val w1Observed: WordType, val w1WithDrop: WordType, 
     val w2Underlying: WordType, val w2Observed: WordType, val right: WordType,
@@ -30,41 +29,30 @@ class Context(val left: WordType,val w1Underlying: WordType, val w1Observed: Wor
 }
 
 
-object SymbolTableString {
-  val hmStoR = new HashMap[String,Int]
-  val hmRtoS = new HashMap[Int,String]
-  var nextR: Int = 0
-  def nSymbols = hmStoR.size
-  def getNextR: Int = {
-    nextR = (nextR+1)
-    (nextR-1).toInt
-  }
-  
-  def apply(x: String): Int = {
-    //println("retrieve Symbol: "+x)
-    hmStoR.getOrElseUpdate(x,{val newId=getNextR; hmRtoS(newId)=x; newId})
-  }
-  
-  def apply(x: Int): String =
-    hmRtoS.getOrElse(x, throw new Error("Can't retrieve unknown value from Symbol-Table: " +x))
-}
 
+/**
+ * variable data --- allows for dropping a single segment at the end of a word
+ * keeps boundary information and provides word-extraction functionality
+ */
 class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*", val DROPSYMBOL: String = "T") {
 	val UBOUNDARYSYMBOL="$"
-	val UBOUNDARYWORD=new Builder[Int].add(SymbolTableString(UBOUNDARYSYMBOL)).build()
-	val DROPSEG=SymbolTableString(DROPSYMBOL)
+	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
+	val DROPSEG=SymbolTable(DROPSYMBOL)
 	
+	/**
+	 * Initialize the data and goldBoundaries
+	 */
 	val (data: WordType,goldBoundaries: Array[Boundary]) = {
 		var seqPhones = Vector.empty[Int]
 		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundaryNodrop
 		def processLine(line: String) = {
 			for (w <- line.stripLineEnd.split("\t")) {
 				for (c: String <- w.split(" ")) {
-				seqPhones = seqPhones:+ SymbolTableString(c)
+				seqPhones = seqPhones:+ SymbolTable(c)
 					seqBoundaries = seqBoundaries:+NoBoundary
 				}
 	      // adjust for word-boundaries --- last NoBoundary is in fact a word-boundary
-				if (SymbolTableString(seqPhones.last)==MISSING) {
+				if (SymbolTable(seqPhones.last)==MISSING) {
 					seqPhones = seqPhones.dropRight(1)
 					seqBoundaries = seqBoundaries.dropRight(2):+WBoundaryDrop
 				} else {
@@ -87,6 +75,9 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	
 	var boundaries = randomBoundaries.toArray
 	
+	/**
+	 * randomize boundaries
+	 */
 	def randomBoundaries = {
 		var seqBoundaries: Vector[Boundary] = Vector.empty
 		for (b <- goldBoundaries) {
@@ -110,7 +101,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 * P(s|u), but read: probability of realizing u as s, hence the order
 	 */
 	def R(u: WordType, s: WordType): Double = {
-	  val res = SymbolTableString(u.get(u.size-1)) match {
+	  val res = SymbolTable(u.get(u.size-1)) match {
 	  case DROPSYMBOL => {
 	    if (u==s)
 	      (1-dropProb(u))
@@ -130,21 +121,24 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	}
 	
 	
-	def _wBound(op: Int=>Int)(cPos: Int): Int = boundaries(cPos) match {
+	def _findBoundary(op: Int=>Int)(cPos: Int): Int = boundaries(cPos) match {
     	case WBoundaryDrop | WBoundaryNodrop | UBoundaryDrop | UBoundaryNodrop => cPos
-    	case NoBoundary =>  _wBound(op)(op(cPos))
+    	case NoBoundary =>  _findBoundary(op)(op(cPos))
 	}
    
 
-	def bToLeft: (Int=>Int) = _wBound(_-1)
-	def bToRight: (Int=>Int) = _wBound(_+1)
+	def boundaryToLeft: (Int=>Int) = _findBoundary(_-1)
+	def boundaryToRight: (Int=>Int) = _findBoundary(_+1)
 
-	def getLeftWord(pos: Int): (WordType, WordType, WordType) = 
-	  if (pos==0 || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-			(UBOUNDARYWORD,UBOUNDARYWORD,UBOUNDARYWORD)
-	  else {
-		  val res: WordType =  data.subList(bToLeft(pos-1), pos)
-		  val resWithDrop = new Builder[Int].addAll(res).add(DROPSEG).build()
+	/**
+	 * get the word to the left of the indicated position
+	 */
+	def getLeftWord(pos: Int): (WordType, WordType, WordType) = { 
+//	  if (pos==0 || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
+//			(UBOUNDARYWORD,UBOUNDARYWORD,UBOUNDARYWORD)
+//	  else {
+		  val res: WordType =  data.subList(boundaryToLeft(pos-1), pos)
+		  val resWithDrop = suffix(res,DROPSEG)
 		  boundaries(pos) match {	
 		  	case UBoundaryDrop | WBoundaryDrop =>  
 		  	  (resWithDrop,res,resWithDrop)
@@ -153,17 +147,20 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		  }
 	  }
 			
-	
-	def getRightWord(pos: Int): (WordType,WordType) = if (pos==(boundaries.size-1) || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-			(UBOUNDARYWORD,UBOUNDARYWORD)
-		else {
-		  val end=bToRight(pos+1)
+	/**
+	 * get the word to the right of the indicated position
+	 */
+	def getRightWord(pos: Int): (WordType,WordType,Boolean) = { 
+//	  if (pos==(boundaries.size-1) || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
+//			(UBOUNDARYWORD,UBOUNDARYWORD)
+//		else {
+		  val end=boundaryToRight(pos+1)
 		  val res: WordType=data.subList(pos,end)
 		  boundaries(end) match {
 		    case UBoundaryDrop | WBoundaryDrop => 
-		      (new Builder[Int].addAll(res).add(DROPSEG).build(),res)
+		      (suffix(res,DROPSEG),res,boundaries(end)==UBoundaryDrop)
 		    case _ =>
-		      (res,res)
+		      (res,res,boundaries(end)==UBoundaryNodrop)
 		  }
 		}
 				    
@@ -171,12 +168,12 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 * get all the tokens associated with a certain boundary    
 	 */
 	def context(pos: Int): Context = {
-		val w1Start = bToLeft(pos-1)
-		val w2end = bToRight(pos+1)
+		val w1Start = boundaryToLeft(pos-1)
+		val w2end = boundaryToRight(pos+1)
 		val (w1Underlying,w1Observed,w1WithT) = getLeftWord(pos)
-		val (w2Underlying,w2Observed) = getRightWord(pos)
-		val w1w2Underlying = new Builder[Int]().addAll(w1Observed).addAll(w2Underlying).build
-		val w1w2Observed = new Builder[Int]().addAll(w1Observed).addAll(w2Observed).build
+		val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
+		val w1w2Underlying = concat(w1Observed,w2Underlying)
+		val w1w2Observed = concat(w1Observed,w2Observed)
 		new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
 		    getRightWord(w2end)._1,w1w2Underlying,w1w2Observed)
 	}
@@ -188,18 +185,18 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 *    
 	 */
 	def contextLeft(pos: Int): Context = {
-		val w1Start = bToLeft(pos-1)
+		val w1Start = boundaryToLeft(pos-1)
 		val res = data.subList(w1Start, pos)
-		val resWithDrop = new Builder[Int].addAll(res).add(DROPSEG).build
+		val resWithDrop = suffix(res,DROPSEG)
 		boundaries(pos) match {	
 		  	case UBoundaryDrop => {  
 		  	  val (w1Underlying,w1Observed,w1WithT)=(resWithDrop,res,resWithDrop)
-		  	  val (w2Underlying,w2Observed) = getRightWord(pos)
+		  	  val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
 		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
 		  			  null,null,null)}		  	  
 		  	case UBoundaryNodrop => {
 		  	  val (w1Underlying,w1Observed,w1WithT)=(res,res,resWithDrop)
-		  	  val (w2Underlying,w2Observed) = getRightWord(pos)
+		  	  val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
 		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
 		  			  null,null,null)}		  	  
 		  	case _ =>
@@ -215,19 +212,19 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	      boundaries(cPos) match {
 	      	case NoBoundary => inner(sPos,cPos+1,res)
 	      	case WBoundaryDrop => {
- 	      	  res.append(new Builder[Int].addAll(data.subList(sPos-1, cPos)).add(SymbolTableString(DROPSYMBOL)).build().toString+"::")
+ 	      	  res.append(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"::")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
 	      	case WBoundaryNodrop => {
- 	      	  res.append(data.subList(sPos-1, cPos).toString+"::")
+ 	      	  res.append(wToS(data.subList(sPos-1, cPos))+"::")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
 	      	case UBoundaryDrop => {
-	      	  res.append(new Builder[Int].addAll(data.subList(sPos-1, cPos)).add(SymbolTableString(DROPSYMBOL)).build.toString+"\n")
+	      	  res.append(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"\n")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
 	      	case UBoundaryNodrop => {
- 	      	  res.append(data.subList(sPos-1, cPos).toString+"\n")
+ 	      	  res.append(wToS(data.subList(sPos-1, cPos))+"\n")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
 	    }
@@ -243,7 +240,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	      	case NoBoundary => inner(sPos,cPos+1)
 	      	case WBoundaryDrop => {
  	      	  out.print(
- 	      	      wToS(new Builder[Int].addAll(data.subList(sPos-1, cPos)).add(SymbolTableString(DROPSYMBOL)).build)+"::")
+ 	      	      wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"::")
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case WBoundaryNodrop => {
@@ -251,7 +248,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundaryDrop => {
-	      	  out.print(wToS(new Builder[Int].addAll(data.subList(sPos-1, cPos)).add(SymbolTableString(DROPSYMBOL)).build)+"\n")
+	      	  out.print(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"\n")
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundaryNodrop => {
