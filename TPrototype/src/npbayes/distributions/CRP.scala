@@ -28,6 +28,10 @@ object CRP {
 	  }
 	}
 	
+  	
+  	/**
+  	 * returns true if a table gets empty
+  	 */
 	def removeFrom(seating: HashMap[Int,Int],tableSize: Int): Boolean = {
 	  val oneLessTS = seating(tableSize)-1
 	  if (oneLessTS==0) {
@@ -69,6 +73,11 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
       remove(prev)
     res
   }
+  
+    def sanityCheck: Boolean = {
+  	  _oCount==hmObsCounts.values.foldRight(0)(_+_)
+  	  _tCount==hmTableCounts.values.foldRight(0)(_+_)
+  	}
   
   def isEmpty: Boolean = _oCount==0
   
@@ -176,6 +185,11 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
         if (removeFrom<=current+tableSize*nTables) {
           if (CRP.removeFrom(hmTables(obs),tableSize)) {
             _tCount -=1
+            val nObsTables = hmTableCounts(obs)-1
+            if (nObsTables==0)
+              hmTableCounts.remove(obs)
+            else
+              hmTableCounts(obs)=nObsTables
             base.remove(obs)
           }
         }

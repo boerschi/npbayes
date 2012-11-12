@@ -221,6 +221,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def gibbsSweep(anneal: Double=1.0): Double = {
 	  for (i: Int <- shuffle(1 until boundaries.length)) 
 		  resample(i,anneal)
-	  pypUni.logProb
+	  logProb
 	}
+	
+	def logProb: Double = {
+//	  assert(pypUni.sanityCheck)
+	  pypUni.logProb
+	} 
+
 }

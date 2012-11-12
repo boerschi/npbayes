@@ -180,6 +180,35 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	
 
 	/**
+	 * returns a triple (observed,underlying,withDrop)
+	 */
+	def getWordWithVar(sPos: Int, ePos: Int): (WordType,WordType,WordType) = {
+	  val word = data.subList(sPos, ePos)
+	  val wD = suffix(word,DROPSEG)
+	  boundaries(ePos) match {
+	    case UBoundaryDrop | WBoundaryDrop =>
+	      (word,wD,wD)
+	    case _ =>
+	      (word,word,wD)
+	  }
+	}
+	
+	/**
+	 * returns a tuple (observed,underlying)
+	 * 
+	 * this may save the additional cost of creating a copy of the token with an additional dropsegment
+	 */
+	def getWord(sPos: Int, ePos: Int): (WordType,WordType) = {
+	  val word = data.subList(sPos, ePos)
+	  boundaries(ePos) match {
+	    case UBoundaryDrop | WBoundaryDrop =>
+	      (word,suffix(word,DROPSEG))
+	    case _ =>
+	      (word,word)
+	  }
+	}
+
+	/**
 	 * get all the tokens associated with a certain boundary to the left
 	 * for bigram initialization
 	 *    
