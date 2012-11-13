@@ -204,6 +204,8 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
               hmTableCounts(obs)=nObsTables
             base.remove(obs)
           }
+          if (hmTables(obs).isEmpty)
+            hmTables.remove(obs)
         }
         else
           inner(seating.tail,removeFrom,current+tableSize*nTables)

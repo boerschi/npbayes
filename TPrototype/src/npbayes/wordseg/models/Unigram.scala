@@ -8,6 +8,8 @@ import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
+import npbayes.utils.Histogram
+
 
 
 abstract class UContext
@@ -28,7 +30,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	var nUtterances = 0
-
+	var lost: Histogram =new Histogram
+	var changed = 0
+	var boundToNo = 0
+	var noToBound = 0
+	
+	
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
 
@@ -44,10 +51,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	/**
 	 * returns the probability for generating an utterance final word
 	 */
-	def _predBoundary(add: Int=0) = {
-	  (nUtterances+betaUB/2.0)/(nTokens+betaUB+add)
+	def _predBoundary(phantomCustomers: Int=0) = {
+	  (nUtterances+betaUB/2.0)/(nTokens+betaUB+phantomCustomers)
 	}
-	  
+	   
 	
 	/**
 	 * initializes the CRP with the counts
@@ -70,8 +77,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	case UBoundaryDrop => {
 	      	  update(suffix(_phoneSeq.subList(sPos-1, cPos),data.DROPSEG))
  	      	  nUtterances+=1
-	      	  inner(cPos+1,cPos+1)
- 	      	  
+	      	  inner(cPos+1,cPos+1) 	      	  
 	      	}
 	      	case UBoundaryNodrop => {
 	      	  update(_phoneSeq.subList(sPos-1, cPos))
@@ -132,7 +138,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  toSurface(w1Under,w1Obs)*
 	  (1-_predBoundary())*
 	  pypUni(w2Under,List(w1Under))*
-	  pypUni(w2Under)*
+//	  pypUni(w2Under)*
 	  toSurface(w2Under,w2Obs)*
 	  {if (isFinal) _predBoundary(1) else (1-_predBoundary(1))}
 	}
@@ -188,17 +194,32 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 	def updateBoundary(pos: Int, b: Boundary, context: UContext) = {
+	  val hasChanged = boundaries(pos)!=b
 	  data.setBoundary(pos, b)
 	  context match {
 	    case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,isFinal) =>
 	    	b match {
-	    	  case NoBoundary => update(w1w2U)
+	    	  case NoBoundary => 
+	    	    update(w1w2U)
+	    	    if (hasChanged) {
+	    	      changed+=1
+	    	      boundToNo+=1
+	    	      lost.incr((w1O,w2O))
+	    	    }
 	    	  case WBoundaryDrop => 
 	    	    update(w1D)
 	    	    update(w2U)
+	    	    if (hasChanged) {
+	    	      changed+=1
+	    	      noToBound+=1
+	    	    }
 	    	  case WBoundaryNodrop =>
 	    	    update(w1O)
 	    	    update(w2U)
+	    	    if (hasChanged) {
+	    	      changed+=1
+	    	      noToBound+=1
+	    	    }	    	    
 	    	}
 	    	if (isFinal) nUtterances+=1
 	    case UnigramFinalContext(w1O,w1U,w1D) =>
@@ -229,16 +250,22 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
 	    if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
 	      Unit
-		val context = boundaryContext(pos)
-		removeAssociatedObservations(context,boundaries(pos)==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
-		val result = _calcHypotheses(context)
-		if (anneal==1.0)
-		  updateBoundary(pos, result.sample,context)
-		else
-		  updateBoundary(pos, result.sample(anneal),context)
+	    else { 
+			val context = boundaryContext(pos)
+			removeAssociatedObservations(context,boundaries(pos)==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
+			val result = _calcHypotheses(context)
+			if (anneal==1.0)
+			  updateBoundary(pos, result.sample,context)
+			else
+			  updateBoundary(pos, result.sample(anneal),context)
+	    }
 	}
 	
 	def gibbsSweep(anneal: Double=1.0): Double = {
+	  changed = 0
+	  noToBound=0
+	  boundToNo=0
+	  lost = new Histogram
 	  for (i: Int <- shuffle(1 until boundaries.length)) 
 		  resample(i,anneal)
 	  logProb
