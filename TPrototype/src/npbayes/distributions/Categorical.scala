@@ -37,7 +37,7 @@ class Categorical[T] {
 object Categorical {
   val unif = new scala.util.Random()
   
-  def sample[T](outcomes: List[(T,Double)],partition: Double)(flip: Double) = {
+  def sample[T](outcomes: List[(T,Double)],partition: Double)(rnd: Double) = {
     def inner(events: List[(T,Double)],cur: Double,flip: Double): T = events match {
       case List() => throw new Error("Categorical.sample: couldn't produce sample")
       case (res,prob)::tail => {
@@ -47,6 +47,6 @@ object Categorical {
           inner(tail,cur+prob,flip)
       }
     }
-    inner(outcomes,0,Categorical.unif.nextDouble*partition)
+    inner(outcomes,0,rnd*partition)
   }
 }

@@ -25,7 +25,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
-	val pypUni = new CRP[WordType](concentration,discount,new Monkey(SymbolTable.nSymbols,0.5),assumption)
+	//nSymbols-2 because of the "$" and the drop-indicator symbol
+	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	var nUtterances = 0
 
 	def boundaries = data.boundaries
@@ -80,7 +81,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  }
 	  if (gold)
 	    data.boundaries=data.goldBoundaries.clone
-	  inner(1,1)
+	  val res = inner(1,1)
+//	  assert(pypUni.sanityCheck)
+	  res
 	}	
 	
 	
@@ -89,11 +92,13 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 */
 	def medialContext(pos: Int) = {
 	  assert(pos>0 && boundaries(pos)!=UBoundaryDrop && boundaries(pos)!=UBoundaryNodrop && pos<(boundaries.length-1))
-	  val (w1O,w1U,w1D) = data.getLeftWord(pos)
-	  val (w2O,w2U,isFinal) = data.getRightWord(pos)
+	  val w1Start = data.boundaryToLeft(pos-1)
+	  val w2End = data.boundaryToRight(pos+1)
+	  val (w1O,w1U,w1D) = data.getWordWithVar(w1Start, pos)
+	  val (w2O,w2U) = data.getWord(pos, w2End)
 	  val w1w2O = concat(w1O,w2O)
 	  val w1w2U = concat(w1O,w2U)
-	  new UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,isFinal)
+	  new UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,boundaries(w2End)==UBoundaryDrop||boundaries(w2End)==UBoundaryNodrop)
 	}
 	
 	/**
@@ -101,7 +106,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 */
 	def finalContext(pos: Int) = {
 	  assert(pos>0 && (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop))
-	  val (w1O,w1U,w1D) = data.getLeftWord(pos)
+	  val w1Start = data.boundaryToLeft(pos-1)
+	  val (w1O,w1U,w1D) = data.getWordWithVar(w1Start, pos)
 	  new UnigramFinalContext(w1O,w1U,w1D)
 	}
 	
@@ -117,23 +123,33 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	/**
 	 * whether or not a drop occured is handled fully by what you pass
 	 */
-	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, isFinal: Boolean) =
+	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, isFinal: Boolean) = {
+	  val predw1 = pypUni(w1Under)
+	  val predw2 = pypUni(w2Under,List(w1Under))
+	  val cont1 = (1-_predBoundary())
+	  val cont2 = if (isFinal) _predBoundary(1) else (1-_predBoundary(1))
 	  pypUni(w1Under)*
 	  toSurface(w1Under,w1Obs)*
 	  (1-_predBoundary())*
 	  pypUni(w2Under,List(w1Under))*
+	  pypUni(w2Under)*
 	  toSurface(w2Under,w2Obs)*
 	  {if (isFinal) _predBoundary(1) else (1-_predBoundary(1))}
+	}
 
 
-	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, isFinal: Boolean) = 
+	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, isFinal: Boolean) = {
+	  val predw1w2 = pypUni(w1w2Under)
+	  val cont = if (isFinal) _predBoundary() else (1-_predBoundary())
 	  pypUni(w1w2Under)*
 	  toSurface(w1w2Under,w1w2Obs)*
 	  {if (isFinal) _predBoundary() else (1-_predBoundary())}
+	}
 	
 	def _ubProb(w1U: WordType, w1O: WordType) =
 	  pypUni(w1U)*
 	  toSurface(w1U,w1O)
+	
 	
 	/**
 	 * returns a distribution over all possible ways to resample
@@ -193,6 +209,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	          update(w1O)
 	      }
 	  }
+//	  assert(pypUni.sanityCheck)
 	}
 	
 	def removeAssociatedObservations(context: UContext, hasBoundary: Boolean) =
@@ -206,9 +223,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      remove(w1w2U)
 	  case UnigramFinalContext(_,w1U,_) =>
 	    remove(w1U)
+//	  assert(pypUni.sanityCheck)
 	}
 	
-	def resample(pos: Int, anneal: Double=1.0): Unit = {  
+	def resample(pos: Int, anneal: Double=1.0): Unit = {
+	    if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
+	      Unit
 		val context = boundaryContext(pos)
 		removeAssociatedObservations(context,boundaries(pos)==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
 		val result = _calcHypotheses(context)
@@ -225,7 +245,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 	def logProb: Double = {
-//	  assert(pypUni.sanityCheck)
+	  assert(pypUni.sanityCheck)
 	  pypUni.logProb
 	} 
 

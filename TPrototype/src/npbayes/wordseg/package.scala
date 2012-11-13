@@ -8,7 +8,7 @@ class Result(val tp: Double,val tr: Double, val bp: Double, val br: Double, val 
   val lf = 2*lp*lr/(lp+lr)
   
   override def toString =
-    tf+" "+tp+" "+tr+" "+bf+" "+bp+" "+br
+    tp+" "+tr+" "+tf+" "+bp+" "+br+" "+bf
 }
 
 object `package` {

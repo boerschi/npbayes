@@ -3,7 +3,7 @@ package npbayes.distributions
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.collection.mutable.WeakHashMap
-import npbayes.Utils
+import npbayes.utils.Utils
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.LinkedList
 
@@ -75,8 +75,11 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
   }
   
     def sanityCheck: Boolean = {
-  	  _oCount==hmObsCounts.values.foldRight(0)(_+_)
-  	  _tCount==hmTableCounts.values.foldRight(0)(_+_)
+  	  _oCount==hmObsCounts.values.foldRight(0)(_+_) &&
+  	  _tCount==hmTableCounts.values.foldRight(0)(_+_) &&
+  	  {for ((obs,c) <- hmObsCounts.toList)
+  	     yield c==hmTables(obs).map(x=>x._1*x._2).sum && 
+  	     hmTableCounts(obs)==hmTables(obs).values.sum}.foldLeft(true)(_&&_)
   	}
   
   def isEmpty: Boolean = _oCount==0
@@ -109,13 +112,15 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     if (_oCount==0)
       0
     else
-      (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
+//      (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
+      (_oCount(obs)) / (_oCount+concentration)
       
   def _pSitAtNew(obs: T) =
     if (_oCount==0) {
       base(obs)
     } else {
-      (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
+//      (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
+      concentration*base(obs) / (_oCount+concentration)
     }
   
   
@@ -125,16 +130,23 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
         throw new Error("Couldn't add to "+obs+" "+hmTables)
       else {
         val (tableSize,nTables) = seating.head
-        if (sitAt<=current+tableSize*nTables-discount*nTables) {
+//        if (sitAt<=current+tableSize*nTables-discount*nTables) {
+        if (sitAt<=current+tableSize*nTables) {        
           CRP.seatAt(hmTables(obs),tableSize)
           tableSize
         }
         else
-          inner(seating.tail,sitAt,current+tableSize*nTables-discount*nTables)
+//          inner(seating.tail,sitAt,current+tableSize*nTables-discount*nTables)
+          inner(seating.tail,sitAt,current+tableSize*nTables)
       }
-	val nCust=inner(hmTables(obs),_random.nextDouble()*(_oCount(obs)-discount*_tCount(obs)))
+//	val nCust=inner(hmTables(obs),_random.nextDouble()*(_oCount(obs)-discount*_tCount(obs)))
+	val nCust=inner(hmTables(obs),_random.nextInt(_oCount(obs))+1)
+//	val nCust=inner(hmTables(obs),_random.nextDouble()*(_oCount(obs)))
     Utils.incr(hmObsCounts, obs)
-    (nCust-discount)/(_oCount-1+concentration)
+    val res = (nCust)/(_oCount+concentration) 
+//    (nCust-discount)/(_oCount-1+concentration)
+    _oCount += 1
+    res
   }
   
   def _seatAtNew(obs: T): Double = {
@@ -144,11 +156,11 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     val res = _pSitAtNew(obs)
     base.update(obs)
     _tCount += 1
+    _oCount += 1
     res
   }
     
   def update (obs: T): Double = {
-    _oCount += 1
     assumption match  {
      case EXACT =>   { 
       val oldT = _pSitAtOld(obs)

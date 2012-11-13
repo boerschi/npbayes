@@ -36,12 +36,19 @@ object `package` {
   /**
    * convenience functions to build and display words
    */
-  def wToS (w: WordType): String = {
+  implicit def wToS (w: WordType): String = {
     val res = new StringBuilder
     for (i: Int <- (0 to w.size-1)){ 
       res.append(SymbolTable(w.get(i)))
     }
     res.result
+  }
+  
+  implicit def sToW (s: String): WordType = {
+    val res = new ImmutableList.Builder[SegmentType]
+    for (c <- s.toList)
+      res.add(SymbolTable(c.toString))
+    res.build
   }
 
   def concat(w1: WordType, w2: WordType): WordType = 
