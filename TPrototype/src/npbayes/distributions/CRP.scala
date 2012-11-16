@@ -48,7 +48,7 @@ object CRP {
 	}
 }
 
-class CRP[T](val concentration: Double, val discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
+class CRP[T](var concentration: Double, var discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count
   val hmTableCounts: HashMap[T,Int] = new HashMap() //maps each observation to the number of tables
@@ -91,10 +91,12 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     logProbSeating + base.logProb
   }
   
+  def logProbSeating =
+    _logProbSeating(concentration,discount)
   /**
    * just the seating-arrangement
    */
-  def logProbSeating: Double = {
+  def _logProbSeating(concentration: Double, discount: Double): Double = {
     //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
     var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
     for (w: T <- hmTables.keySet)
@@ -112,39 +114,37 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     if (_oCount==0)
       0
     else
-//      (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
-      (_oCount(obs)) / (_oCount+concentration)
+      (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
+//      (_oCount(obs)) / (_oCount+concentration)
       
   def _pSitAtNew(obs: T) =
-    if (_oCount==0) {
-      base(obs)
-    } else {
-//      (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
-      concentration*base(obs) / (_oCount+concentration)
-    }
+    (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
+
   
-  
+  /**
+   * sit at any table with probability proportional to size-discount
+   * ==> sit at any of the n tables with m customers with prob prop to (m-discount)*n
+   * ==> denominator is _oCount(obs)-_tCount(obs)*discount 
+   * 
+   */
   def _seatAtOld(obs: T): Double = {
-	def inner(seating: HashMap[Int,Int],sitAt: Double,current: Double=0): Int = 
+	def inner(seating: HashMap[Int,Int],r: Double, current: Double): Int = 
       if (seating.isEmpty)
         throw new Error("Couldn't add to "+obs+" "+hmTables)
       else {
         val (tableSize,nTables) = seating.head
 //        if (sitAt<=current+tableSize*nTables-discount*nTables) {
-        if (sitAt<=current+tableSize*nTables) {        
+        if (r<current+(tableSize-discount)*nTables) {        
           CRP.seatAt(hmTables(obs),tableSize)
           tableSize
         }
         else
 //          inner(seating.tail,sitAt,current+tableSize*nTables-discount*nTables)
-          inner(seating.tail,sitAt,current+tableSize*nTables)
+          inner(seating.tail,r,current+(tableSize-discount)*nTables)
       }
-//	val nCust=inner(hmTables(obs),_random.nextDouble()*(_oCount(obs)-discount*_tCount(obs)))
-	val nCust=inner(hmTables(obs),_random.nextInt(_oCount(obs))+1)
-//	val nCust=inner(hmTables(obs),_random.nextDouble()*(_oCount(obs)))
+	val nCust=inner(hmTables(obs),_random.nextDouble*(_oCount(obs)-_tCount(obs)*discount),0)
     Utils.incr(hmObsCounts, obs)
-    val res = (nCust)/(_oCount+concentration) 
-//    (nCust-discount)/(_oCount-1+concentration)
+    val res = (nCust-discount)/(_oCount+concentration) 
     _oCount += 1
     res
   }
@@ -159,14 +159,15 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
     _oCount += 1
     res
   }
-    
+  
+  
   def update (obs: T): Double = {
     assumption match  {
      case EXACT =>   { 
       val oldT = _pSitAtOld(obs)
       val newT = _pSitAtNew(obs)
       val p=_random.nextDouble*(oldT+newT)
-	  if (p <= oldT) {
+	  if (p < oldT) {
 		_seatAtOld(obs)
 	  } else {
 		_seatAtNew(obs)
@@ -185,16 +186,21 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
   }
 	
     
-    
+  /**
+   * remove from a table with probability proportional to its size
+   * 
+   *   ==> remove from any of the n tables with m customers with probability proportional to n*m
+   *   ==> denominator is total number of customers of type obs
+   */
   
   
   def remove (obs: T): Double = {
-	def inner(seating: HashMap[Int,Int],removeFrom: Int,current: Int=0): Unit = 
+	def inner(seating: HashMap[Int,Int],r: Double,current: Int=0): Unit = 
       if (seating.isEmpty)
         throw new Error("Couldn't remove from "+obs)
       else {
         val (tableSize,nTables) = seating.head
-        if (removeFrom<=current+tableSize*nTables) {
+        if (r<current+tableSize*nTables) {
           if (CRP.removeFrom(hmTables(obs),tableSize)) {
             _tCount -=1
             val nObsTables = hmTableCounts(obs)-1
@@ -208,11 +214,30 @@ class CRP[T](val concentration: Double, val discount: Double, val base: Posterio
             hmTables.remove(obs)
         }
         else
-          inner(seating.tail,removeFrom,current+tableSize*nTables)
+          inner(seating.tail,r,current+tableSize*nTables)
       }
-    inner(hmTables(obs),_random.nextInt(_oCount(obs)))
+//    inner(hmTables(obs),_random.nextInt(_oCount(obs)))
+	inner(hmTables(obs),_random.nextDouble*_oCount(obs))
     Utils.decr(hmObsCounts,obs)
     _oCount-=1
     predProb(obs)
   }
+  
+  def _logProbSeatingByConc: (Double => Double) = 
+    _logProbSeating(_: Double, discount)
+  
+  def _logProbSeatingByDisc: (Double => Double) =
+    _logProbSeating(concentration, _: Double)
+    
+  
+  /**
+   * tells you what the normalized probabilites of sitting down are
+   */
+  def __seatChoice(obs: T) = {
+    val pOld = _pSitAtOld(obs)
+    val pNew = _pSitAtNew(obs)
+    val p = pOld + pNew
+    List(("old:",pOld/p),("new:",pNew/p))
+  }
+  
   }

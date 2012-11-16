@@ -35,7 +35,7 @@ class Context(val left: WordType,val w1Underlying: WordType, val w1Observed: Wor
  * keeps boundary information and provides word-extraction functionality
  */
 class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*", val DROPSYMBOL: String = "T") {
-	val UBOUNDARYSYMBOL="$"
+	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
 	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
 	val DROPSEG=SymbolTable(DROPSYMBOL)
 	
