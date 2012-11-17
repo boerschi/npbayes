@@ -192,8 +192,6 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
    *   ==> remove from any of the n tables with m customers with probability proportional to n*m
    *   ==> denominator is total number of customers of type obs
    */
-  
-  
   def remove (obs: T): Double = {
 	def inner(seating: HashMap[Int,Int],r: Double,current: Int=0): Unit = 
       if (seating.isEmpty)
@@ -215,6 +213,27 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
         }
         else
           inner(seating.tail,r,current+tableSize*nTables)
+      }
+	def _inner(seating: HashMap[Int,Int],r: Double): Unit = 
+      if (seating.isEmpty)
+        throw new Error("Couldn't remove from "+obs)
+      else {
+        val (tableSize,nTables) = seating.head
+        if (r-tableSize*nTables<=0) {
+          if (CRP.removeFrom(hmTables(obs),tableSize)) {
+            _tCount -=1
+            val nObsTables = hmTableCounts(obs)-1
+            if (nObsTables==0)
+              hmTableCounts.remove(obs)
+            else
+              hmTableCounts(obs)=nObsTables
+            base.remove(obs)
+          }
+          if (hmTables(obs).isEmpty)
+            hmTables.remove(obs)
+        }
+        else
+          _inner(seating.tail,r-tableSize*nTables)
       }
 //    inner(hmTables(obs),_random.nextInt(_oCount(obs)))
 	inner(hmTables(obs),_random.nextDouble*_oCount(obs))

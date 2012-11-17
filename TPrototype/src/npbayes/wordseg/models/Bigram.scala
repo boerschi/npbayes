@@ -43,8 +43,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def nTokens = pypUni._oCount
 
 	def update(precedingW: WordType, word: WordType): Double = {
-	  debugCounts.getOrElseUpdate(precedingW, new HashMap)(word)=debugCounts(precedingW).getOrElse(word,0)+1
-	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)).update(word)
+//	  debugCounts.getOrElseUpdate(precedingW, new HashMap)(word)=debugCounts(precedingW).getOrElse(word,0)+1
+	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni)).update(word)
 	}
 
 	def removeWrap(precedingW: WordType, word: WordType) = {
@@ -63,8 +63,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 	
 	def sanity: Boolean = {
-	  {for (r <- pypBis.values.toList)
-	    yield r.hmTableCounts.values.sum}.sum == pypUni._oCount &&
+	  /*{for (r <- pypBis.values.toList)
+	    yield r.hmTableCounts.values.sum}.sum == pypUni._oCount &&*/
 	  {for (w1 <- debugCounts.keySet.toList; w2 <- debugCounts(w1).keySet.toList)
 		  	yield debugCounts(w1)(w2)==pypBis(w1)._oCount(w2)}.foldLeft(true)(_&&_)
 	      

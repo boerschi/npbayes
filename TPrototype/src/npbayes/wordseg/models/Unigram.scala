@@ -28,7 +28,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
-	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
+	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5))//,assumption)
 	var nUtterances = 0
 	var lost: Histogram =new Histogram
 	var changed = 0
@@ -39,9 +39,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
 
-	def update: (WordType=>Double) = pypUni.update
+	def update(w: WordType) = pypUni.update(w)
 
-	def remove: (WordType=>Double)= pypUni.remove
+	def remove(w: WordType)= pypUni.remove(w)
 
 	def toSurface: ((WordType,WordType)=>Double) = data.R
 	def DROPSYMBOL = data.DROPSYMBOL
@@ -280,7 +280,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    context match {
 	    	case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,isFinal) =>
 	    		remove(w1U)
+	    		remove(w2U)
 	    		update(w1U)
+	    		update(w2U)
 	    	case UnigramFinalContext(wO,wU,wD) =>
 	    	  remove(wU)
 	    	  update(wU)
@@ -290,7 +292,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 	def gibbsSweepWords(anneal: Double=1.0): Double = {
-	  for (i: Int <- shuffle(1 until boundaries.length)) {
+	  for (i: Int <- 1 until boundaries.length) {
 		  resampleWords(i,anneal)
 	  }
 	  logProb
