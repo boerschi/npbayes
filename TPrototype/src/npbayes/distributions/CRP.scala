@@ -48,6 +48,20 @@ object CRP {
 	}
 }
 
+class TypeCount {
+  var nCust = 0
+  var nTables = 0
+  val nCust_nTables: HashMap[Int,Int] = new HashMap
+  
+  def sitAtNew = {
+    nCust+=1
+    nTables+=1
+    nCust_nTables(1) = nCust_nTables.getOrElse(1,0)+1 
+  }
+  
+  
+}
+
 class CRP[T](var concentration: Double, var discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count

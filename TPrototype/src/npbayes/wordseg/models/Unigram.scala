@@ -133,14 +133,14 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  val predw1 = pypUni(w1Under)
 	  val predw2 = pypUni(w2Under,List(w1Under))
 	  val cont1 = (1-_predBoundary())
-	  val cont2 = if (isFinal) _predBoundary(1) else (1-_predBoundary(1))
+	  val cont2 = if (isFinal) _predBoundary(0) else (1-_predBoundary(0))
 	  pypUni(w1Under)*
 	  toSurface(w1Under,w1Obs)*
 	  (1-_predBoundary())*
-	  pypUni(w2Under,List(w1Under))*
-//	  pypUni(w2Under)*
-	  toSurface(w2Under,w2Obs)*
-	  {if (isFinal) _predBoundary(1) else (1-_predBoundary(1))}
+//	  pypUni(w2Under,List(w1Under))*
+	  pypUni(w2Under)*
+	  toSurface(w2Under,w2Obs)/*
+	  {if (isFinal) _predBoundary(0) else (1-_predBoundary(0))}*/
 	}
 
 
@@ -148,8 +148,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  val predw1w2 = pypUni(w1w2Under)
 	  val cont = if (isFinal) _predBoundary() else (1-_predBoundary())
 	  pypUni(w1w2Under)*
-	  toSurface(w1w2Under,w1w2Obs)*
-	  {if (isFinal) _predBoundary() else (1-_predBoundary())}
+	  toSurface(w1w2Under,w1w2Obs)  //*
+/*	  {if (isFinal) _predBoundary() else (1-_predBoundary())}*/
 	}
 	
 	def _ubProb(w1U: WordType, w1O: WordType) =
@@ -266,7 +266,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  noToBound=0
 	  boundToNo=0
 	  lost = new Histogram
-	  for (i: Int <- shuffle(1 until boundaries.length)) 
+//	  for (i: Int <- shuffle(1 until boundaries.length)) 
+	  for (i: Int <- 1 until boundaries.length)	    
 		  resample(i,anneal)
 	  logProb
 	}

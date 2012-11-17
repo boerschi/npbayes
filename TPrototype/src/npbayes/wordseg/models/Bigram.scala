@@ -26,7 +26,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
 	val pypUni = 
-	  new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5),EXACT)
+	  new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5))//,EXACT)
 //	val biEmpty = new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
 //	var nUtterances = 0
@@ -48,12 +48,12 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 
 	def removeWrap(precedingW: WordType, word: WordType) = {
-	  debugCounts(precedingW)(word)-=1
+/*	  debugCounts(precedingW)(word)-=1
 	  if (debugCounts(precedingW)(word)==0) {
 	    debugCounts(precedingW).remove(word)
 	    if (debugCounts(precedingW).isEmpty)
 	      debugCounts.remove(precedingW)
-	  }
+	  }*/
 	  pypBis(precedingW).remove(word)
 	  if (pypBis(precedingW).isEmpty) {
 	    pypBis.remove(precedingW)
@@ -65,10 +65,10 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def sanity: Boolean = {
 	  /*{for (r <- pypBis.values.toList)
 	    yield r.hmTableCounts.values.sum}.sum == pypUni._oCount &&*/
-	  {for (w1 <- debugCounts.keySet.toList; w2 <- debugCounts(w1).keySet.toList)
+	  /*{for (w1 <- debugCounts.keySet.toList; w2 <- debugCounts(w1).keySet.toList)
 		  	yield debugCounts(w1)(w2)==pypBis(w1)._oCount(w2)}.foldLeft(true)(_&&_)
 	      
-	    }
+	  */true  }
 	//}
 
 	def toSurface(u: WordType, o:WordType): Double = data.R(u,o)
@@ -262,6 +262,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
+	  if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
+	    return
 	  val context = boundaryContext(pos)
 	  removeAssociatedObservations(context, boundaries(pos))
 	  val result = _calcHypotheses(context)
@@ -286,8 +288,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  noToBound = 0
 	  boundToNo = 0
 	  sampled = 0
-	  for (i: Int <- shuffle(1 until boundaries.length)) {
-//	  for (i: Int <- 1 until boundaries.length) {
+//	  for (i: Int <- shuffle(1 until boundaries.length)) {
+	  for (i: Int <- 1 until boundaries.length) {
 		  resample(i,anneal)
 		  sampled+=1
 	  }
