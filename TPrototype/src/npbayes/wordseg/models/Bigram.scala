@@ -262,8 +262,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
-	  if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-	    return
+//	  if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
+//	    return
 	  val context = boundaryContext(pos)
 	  removeAssociatedObservations(context, boundaries(pos))
 	  val result = _calcHypotheses(context)
@@ -299,7 +299,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def resampleWords(pos: Int, anneal: Double) = {
 	  boundaries(pos) match {
 	    case NoBoundary => Unit
-//	    case UBoundaryDrop | UBoundaryNodrop => Unit
+	    case UBoundaryDrop | UBoundaryNodrop => Unit
 	    case _ =>
 	    val context = boundaryContext(pos)
 	    context match {

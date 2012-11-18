@@ -17,7 +17,7 @@ class MonkeyBigram(val nPhones: Int, val pStop: Double,val UB: WordType, val pUB
   var _logProb = 0.0
   
   override def logProb = //_logProb  {
-  {    _nWords*math.log(pStop*_pPhon*(1-pUB))+(_nPhons-_nWords)*math.log((1-pStop)*_pPhon)+
+  {    _nWords*math.log(pStop*_pPhon)+(_nPhons-_nWords)*math.log((1-pStop)*_pPhon)+
       _nUBS*math.log(pUB)
   }
   
@@ -44,8 +44,9 @@ class MonkeyBigram(val nPhones: Int, val pStop: Double,val UB: WordType, val pUB
     res
   }
   def predProb(obs: WordType) = 
-      if (obs==UB)
+      if (obs==UB) 
         pUB
       else
-        (1-pUB)*_pPhon*math.pow(_pPhon*(1-pStop),obs.size-1)*pStop
+        //(1-pUB)*
+        _pPhon*math.pow(_pPhon*(1-pStop),obs.size-1)*pStop
 }
