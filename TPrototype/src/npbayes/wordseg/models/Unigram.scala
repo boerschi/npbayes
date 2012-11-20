@@ -3,12 +3,13 @@ package npbayes.wordseg.models
  * Goldwater-style Unigram model
  */
 
-
+import npbayes.wordseg
 import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
 import npbayes.utils.Histogram
+import npbayes.wordseg.`package`
 
 
 
@@ -61,7 +62,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 */
 	def init(gold:Boolean = false) = {
 	  def inner(sPos: Int,cPos: Int): Unit = 
-	    if (cPos>=boundaries.size)
+	    if (cPos>=boundaries.length)
 	      Unit
 	    else 
 	      boundaries(cPos) match {
@@ -88,7 +89,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  if (gold)
 	    data.boundaries=data.goldBoundaries.clone
 	  val res = inner(1,1)
-//	  assert(pypUni.sanityCheck)
+	  if (wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
 	  res
 	}	
 	
@@ -118,9 +120,6 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 
-	/**
-	 * 
-	 */
 	def boundaryContext(pos: Int): UContext = boundaries(pos) match {
 	  case UBoundaryDrop | UBoundaryNodrop => finalContext(pos)
 	  case _ => medialContext(pos)
@@ -128,31 +127,28 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	
 	/**
 	 * whether or not a drop occured is handled fully by what you pass
+	 * dpseg2 ignores the final continuation-probability (cont2)
 	 */
 	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, isFinal: Boolean) = {
 	  val predw1 = pypUni(w1Under)
 	  val predw2 = pypUni(w2Under,List(w1Under))
 	  val cont1 = (1-_predBoundary())
-	  val cont2 = if (isFinal) _predBoundary(0) else (1-_predBoundary(0))
-	  pypUni(w1Under)*
-	  toSurface(w1Under,w1Obs)*
-	  (1-_predBoundary())*
-//	  pypUni(w2Under,List(w1Under))*
-	  pypUni(w2Under)*
-	  toSurface(w2Under,w2Obs)/*
-	  {if (isFinal) _predBoundary(0) else (1-_predBoundary(0))}*/
+	  val cont2 = if (isFinal) _predBoundary(1) else (1-_predBoundary(1))
+	  predw1 * toSurface(w1Under,w1Obs) * cont1 * 
+	  predw2 * toSurface(w2Under,w2Obs) * cont2
 	}
 
 
+	/**
+	 * dpseg2 ignores the word-final factor (cont), leading to different results
+	 */
 	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, isFinal: Boolean) = {
 	  val predw1w2 = pypUni(w1w2Under)
 	  val cont = if (isFinal) _predBoundary() else (1-_predBoundary())
-	  pypUni(w1w2Under)*
-	  toSurface(w1w2Under,w1w2Obs)  //*
-/*	  {if (isFinal) _predBoundary() else (1-_predBoundary())}*/
+	  predw1w2 * toSurface(w1w2Under,w1w2Obs) * cont
 	}
 	
-	def _ubProb(w1U: WordType, w1O: WordType) =
+	def _pronProb(w1U: WordType, w1O: WordType) =
 	  pypUni(w1U)*
 	  toSurface(w1U,w1O)
 	
@@ -178,9 +174,19 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def _calcFinalHypotheses(w1O: WordType, w1D: WordType): Categorical[Boundary] = {
 	  val res: Categorical[Boundary] = new Categorical
 	  res.add(UBoundaryDrop,
-	      _ubProb(w1D, w1O))
+	      _pronProb(w1D, w1O))
 	  res.add(UBoundaryNodrop,
-	      _ubProb(w1O,w1O))
+	      _pronProb(w1O,w1O))
+	  assert(res.partition>0)
+	  res
+	}
+	
+	def _calcWordHypotheses(w1O: WordType, w1D: WordType): Categorical[Boundary] = {
+	  val res: Categorical[Boundary] = new Categorical
+	  res.add(WBoundaryDrop,
+	      _pronProb(w1D, w1O))
+	  res.add(WBoundaryNodrop,
+	      _pronProb(w1O,w1O))
 	  assert(res.partition>0)
 	  res
 	}
@@ -230,7 +236,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	          update(w1O)
 	      }
 	  }
-//	  assert(pypUni.sanityCheck)
+	  if (wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
 	}
 	
 	def removeAssociatedObservations(context: UContext, hasBoundary: Boolean) =
@@ -244,30 +251,22 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      remove(w1w2U)
 	  case UnigramFinalContext(_,w1U,_) =>
 	    remove(w1U)
-//	  assert(pypUni.sanityCheck)
+	  if (wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
 	}
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
-	    if (boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-	      Unit
-	    else { 
-			val context = boundaryContext(pos)
-			removeAssociatedObservations(context,boundaries(pos)==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
-			val result = _calcHypotheses(context)
-			if (anneal==1.0)
-			  updateBoundary(pos, result.sample,context)
-			else
-			  updateBoundary(pos, result.sample(anneal),context)
-	    }
+		val context = boundaryContext(pos)
+		removeAssociatedObservations(context,boundaries(pos)==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
+		val result = _calcHypotheses(context)
+		if (anneal==1.0)
+		  updateBoundary(pos, result.sample,context)
+		else
+		  updateBoundary(pos, result.sample(anneal),context)
 	}
 	
 	def gibbsSweep(anneal: Double=1.0): Double = {
-	  changed = 0
-	  noToBound=0
-	  boundToNo=0
-	  lost = new Histogram
-//	  for (i: Int <- shuffle(1 until boundaries.length)) 
-	  for (i: Int <- 1 until boundaries.length)	    
+	  for (i: Int <- shuffle(1 until boundaries.length)) 
 		  resample(i,anneal)
 	  logProb
 	}
@@ -275,21 +274,25 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def resampleWords(pos: Int, anneal: Double) = {
 	  boundaries(pos) match {
 	    case NoBoundary => Unit
-//	    case UBoundaryDrop | UBoundaryNodrop => Unit
 	    case _ =>
-	    val context = boundaryContext(pos)
-	    context match {
-	    	case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,isFinal) =>
-	    		remove(w1U)
-	    		remove(w2U)
-	    		update(w1U)
-	    		update(w2U)
-	    	case UnigramFinalContext(wO,wU,wD) =>
-	    	  remove(wU)
-	    	  update(wU)
-	  }	      
+		    val context = boundaryContext(pos)
+		    context match {
+		    	case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,isFinal) =>
+		    		remove(w1U)
+		    		val res = _calcWordHypotheses(w1O, w1D)
+		    		res.sample(anneal) match {
+		    		  case WBoundaryDrop =>
+		    		    data.setBoundary(pos, WBoundaryDrop)
+		    		    update(w1D)
+		    		  case WBoundaryNodrop =>
+		    		    data.setBoundary(pos, WBoundaryNodrop)
+		    		    update(w1O)
+		    		}
+		    	case UnigramFinalContext(wO,wU,wD) =>
+		    	  remove(wU)
+		    	  updateBoundary(pos, _calcFinalHypotheses(wO, wD).sample(anneal), context)
+		    }	      
 	  }
-
 	}
 	
 	def gibbsSweepWords(anneal: Double=1.0): Double = {
@@ -300,7 +303,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 	def logProb: Double = {
-	  assert(pypUni.sanityCheck)
+	  if (npbayes.wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
 	  pypUni.logProb
 	} 
 

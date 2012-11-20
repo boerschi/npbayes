@@ -1,7 +1,6 @@
 package npbayes.wordseg.data
 
 import npbayes.distributions.CRP
-import npbayes.wordseg.Result
 import java.io._
 import scala.collection.mutable.HashMap
 import scala.io.Source
@@ -18,15 +17,6 @@ case object WBoundaryDrop extends Boundary
 case object WBoundaryNodrop extends Boundary
 case object UBoundaryDrop extends Boundary
 case object UBoundaryNodrop extends Boundary
-
-
-
-class Context(val left: WordType,val w1Underlying: WordType, val w1Observed: WordType, val w1WithDrop: WordType, 
-    val w2Underlying: WordType, val w2Observed: WordType, val right: WordType,
-    val w1w2Underlying: WordType, val w1w2Observed: WordType) {
-  override def toString =
-    left.toString+w1Observed.toString+w2Observed.toString+right.toString
-}
 
 
 
@@ -102,7 +92,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 */
 	def R(u: WordType, s: WordType): Double = {
 	  val res = SymbolTable(u.get(u.size-1)) match {
-	  case DROPSYMBOL => {
+	  case DROPSYMBOL => 
 	    if (u==s)
 	      (1-dropProb(u))
 	    else
@@ -110,7 +100,6 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	        dropProb(u)
 	      else
 	        0.0
-	  }
 	  case _ =>
 	    if (u==s)
 	      1.0
@@ -129,55 +118,6 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 
 	def boundaryToLeft: (Int=>Int) = _findBoundary(_-1)
 	def boundaryToRight: (Int=>Int) = _findBoundary(_+1)
-
-	/**
-	 * get the word to the left of the indicated position
-	 */
-	def getLeftWord(pos: Int): (WordType, WordType, WordType) = { 
-//	  if (pos==0 || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-//			(UBOUNDARYWORD,UBOUNDARYWORD,UBOUNDARYWORD)
-//	  else {
-		  val res: WordType =  data.subList(boundaryToLeft(pos-1), pos)
-		  val resWithDrop = suffix(res,DROPSEG)
-		  boundaries(pos) match {	
-		  	case UBoundaryDrop | WBoundaryDrop =>  
-		  	  (resWithDrop,res,resWithDrop)
-		  	case _ =>
-		  	  (res,res,resWithDrop)
-		  }
-	  }
-			
-	/**
-	 * get the word to the right of the indicated position
-	 */
-	def getRightWord(pos: Int): (WordType,WordType,Boolean) = { 
-//	  if (pos==(boundaries.size-1) || boundaries(pos)==UBoundaryDrop || boundaries(pos)==UBoundaryNodrop)
-//			(UBOUNDARYWORD,UBOUNDARYWORD)
-//		else {
-		  val end=boundaryToRight(pos+1)
-		  val res: WordType=data.subList(pos,end)
-		  boundaries(end) match {
-		    case UBoundaryDrop | WBoundaryDrop => 
-		      (suffix(res,DROPSEG),res,boundaries(end)==UBoundaryDrop)
-		    case _ =>
-		      (res,res,boundaries(end)==UBoundaryNodrop)
-		  }
-		}
-				    
-	/**
-	 * get all the tokens associated with a certain boundary    
-	 */
-	def context(pos: Int): Context = {
-		val w1Start = boundaryToLeft(pos-1)
-		val w2end = boundaryToRight(pos+1)
-		val (w1Underlying,w1Observed,w1WithT) = getLeftWord(pos)
-		val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
-		val w1w2Underlying = concat(w1Observed,w2Underlying)
-		val w1w2Observed = concat(w1Observed,w2Observed)
-		new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
-		    getRightWord(w2end)._1,w1w2Underlying,w1w2Observed)
-	}
-	
 
 	/**
 	 * returns a triple (observed,underlying,withDrop)
@@ -208,31 +148,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  }
 	}
 
-	/**
-	 * get all the tokens associated with a certain boundary to the left
-	 * for bigram initialization
-	 *    
-	 */
-	def contextLeft(pos: Int): Context = {
-		val w1Start = boundaryToLeft(pos-1)
-		val res = data.subList(w1Start, pos)
-		val resWithDrop = suffix(res,DROPSEG)
-		boundaries(pos) match {	
-		  	case UBoundaryDrop => {  
-		  	  val (w1Underlying,w1Observed,w1WithT)=(resWithDrop,res,resWithDrop)
-		  	  val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
-		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
-		  			  null,null,null)}		  	  
-		  	case UBoundaryNodrop => {
-		  	  val (w1Underlying,w1Observed,w1WithT)=(res,res,resWithDrop)
-		  	  val (w2Underlying,w2Observed,isFinal) = getRightWord(pos)
-		  	  new Context(getLeftWord(w1Start)._1,w1Underlying,w1Observed,w1WithT,w2Underlying,w2Observed,
-		  			  null,null,null)}		  	  
-		  	case _ =>
-		  	  throw new Error("contextLeft only applicable for Boundary-positions")
-		}
-	}
-	
+
 	def getAnalysis: String = {
 	  def inner(sPos: Int,cPos: Int,res: StringBuilder): String = 
 	    if (cPos>=boundaries.size)

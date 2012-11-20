@@ -6,6 +6,8 @@ import scala.collection.mutable.WeakHashMap
 import npbayes.utils.Utils
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.LinkedList
+import scala.collection.JavaConversions._
+import java.util.TreeMap
 
 import npbayes.wordseg._
 
@@ -14,42 +16,13 @@ case object EXACT extends HEURISTIC
 case object MINPATH extends HEURISTIC
 case object MAXPATH extends HEURISTIC
 
-object CRP {
-  	def seatAt(seating: HashMap[Int,Int],tableSize: Int) = {
-	  if (tableSize==0)
-	    seating(1)=seating.getOrElse(1,0)+1
-	  else {
-		  val oneLessTS = seating(tableSize)-1
-		  if (oneLessTS==0)
-			seating.remove(tableSize)
-		  else
-		    seating(tableSize)=oneLessTS
-		  seating(tableSize+1)=seating.getOrElse(tableSize+1,0)+1
-	  }
-	}
-	
-  	
-  	/**
-  	 * returns true if a table gets empty
-  	 */
-	def removeFrom(seating: HashMap[Int,Int],tableSize: Int): Boolean = {
-	  val oneLessTS = seating(tableSize)-1
-	  if (oneLessTS==0) {
-	    seating.remove(tableSize)
-	  }
-	  else {
-	    seating(tableSize)=oneLessTS
-	  }
-	  if (tableSize>1) {
-	    seating(tableSize-1)=seating.getOrElse(tableSize-1,0)+1
-	    false
-	  } else
-		true
-	}
-}
-
 /**
- * this 
+ * this follows closely Sharons's/Mark's implementation
+ * I found this way of bookkeeping more efficient than maintaining
+ * several independent Maps (obs->counts, obs->tableCounts, obs->tables)
+ * 
+ * not sure whether the java-TreeMap is really necessary and whether the
+ * internal conversions lead to huge performance losses
  * @author bborschi
  *
  */
@@ -57,10 +30,23 @@ class TypeCount {
   var nCust = 0
   var nTables = 0
   val nCust_nTables: HashMap[Int,Int] = new HashMap
+  //val nCust_nTables: TreeMap[Int,Int] = new TreeMap
   
   def isEmpty: Boolean =
     nCust==0 && nTables==0
   
+  def sanity: Boolean = {
+    var nn = 0
+    var mm = 0
+    for ((nC,nT) <- nCust_nTables) {
+      nn += nC*nT
+      mm += nT
+    }
+    assert(nn==nCust)
+    assert(mm==nTables)
+    nn==nCust && mm==nTables
+  }
+    
   def sitAtNew = {
     nCust+=1
     nTables+=1
@@ -73,7 +59,7 @@ class TypeCount {
         throw new Error("Couldn't add to table")
       else {
         val (tableSize: Int,nTables: Int) = tables.next
-        if (r<current+(tableSize-discount)*nTables) {        
+        if (current-(tableSize-discount)*nTables<=0) {        
           val n1 = tableSize+1 //one more table with that many customers
           if (nTables-1==0) //no more tables of this size
             nCust_nTables.remove(tableSize)
@@ -82,9 +68,9 @@ class TypeCount {
           nCust_nTables(n1) = nCust_nTables.getOrElse(n1, 0)+1 
         }
         else
-          inner(tables,current+(tableSize-discount)*nTables)
+          inner(tables,current-(tableSize-discount)*nTables)
       }
-	inner(nCust_nTables.iterator,0)
+	inner(nCust_nTables.iterator,r)
     nCust+=1
   }
   
@@ -149,7 +135,16 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   	  {for ((obs,c) <- hmObsCounts.toList)
   	     yield c==hmTables(obs).map(x=>x._1*x._2).sum && 
   	     hmTableCounts(obs)==hmTables(obs).values.sum}.foldLeft(true)(_&&_)*/
-      true
+      var nn=0
+      var tt=0
+      for ((word,counts) <- labelTabels.toList) {
+        assert(counts.sanity)
+        nn+=counts.nCust
+        tt+=counts.nTables
+      }
+      assert(nn==_oCount)
+      assert(tt==_tCount)
+      nn==_oCount && tt==_tCount
   	}
   
   def isEmpty: Boolean = _oCount==0
@@ -163,6 +158,7 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   
   def logProbSeating =
     _logProbSeating(concentration,discount)
+
   /**
    * just the seating-arrangement
    */
@@ -172,10 +168,6 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
     for (tokenCount <- labelTabels.values)
       for ((nC,nT) <- tokenCount.nCust_nTables)
     	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
-/*    for (w: T <- hmTables.keySet)
-      for ((nC: Int,nT: Int) <- hmTables(w))
-        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT*/
-    
     if (discount==0)
       res += _tCount*math.log(concentration)
     else
@@ -189,84 +181,38 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       0
     else
       (_oCount(obs)-discount*_tCount(obs)) / (_oCount+concentration)
-//      (_oCount(obs)) / (_oCount+concentration)
       
   def _pSitAtNew(obs: T) =
     (concentration+discount*_tCount)*base(obs) / (_oCount+concentration)
 
   
-  
-    
-  /**
-   * sit at any table with probability proportional to size-discount
-   * ==> sit at any of the n tables with m customers with prob prop to (m-discount)*n
-   * ==> denominator is _oCount(obs)-_tCount(obs)*discount 
-   * 
-   */
-/*  def __seatAtOld(obs: T): Double = {
-	def inner(seating: HashMap[Int,Int],r: Double, current: Double): Int = 
-      if (seating.isEmpty)
-        throw new Error("Couldn't add to "+obs+" "+hmTables)
-      else {
-        val (tableSize,nTables) = seating.head
-//        if (sitAt<=current+tableSize*nTables-discount*nTables) {
-        if (r<current+(tableSize-discount)*nTables) {        
-          CRP.seatAt(hmTables(obs),tableSize)
-          tableSize
-        }
-        else
-//          inner(seating.tail,sitAt,current+tableSize*nTables-discount*nTables)
-          inner(seating.tail,r,current+(tableSize-discount)*nTables)
-      }
-	val nCust=inner(hmTables(obs),_random.nextDouble*(_oCount(obs)-_tCount(obs)*discount),0)
-    Utils.incr(hmObsCounts, obs)
-    val res = (nCust-discount)/(_oCount+concentration) 
-    _oCount += 1
-    res
-  }
-  
-  def __seatAtNew(obs: T): Double = {
-    Utils.incr(hmObsCounts, obs)
-    Utils.incr(hmTableCounts,obs)
-    CRP.seatAt(hmTables.getOrElseUpdate(obs, new HashMap()),0)
-    val res = _pSitAtNew(obs)
-    base.update(obs)
-    _tCount += 1
-    _oCount += 1
-    res
-  }*/
-  
-  
   def update (obs: T): Double = {
     assumption match  {
-     case EXACT =>   { 
-      val oldT = _pSitAtOld(obs)
-      val newT = _pSitAtNew(obs)
-      val p=_random.nextDouble*(oldT+newT)
+     case EXACT =>   
+      val oldT = _oCount(obs)-discount*_tCount(obs)
+      val newT = (concentration+discount*_tCount)*base(obs)
+      val p = _random.nextDouble*(oldT+newT)
       _oCount+=1
 	  if (p < oldT) {
-	    labelTabels(obs).sitAtOld(p*labelTabels(obs).nCust, discount)
-	    oldT
-//		_seatAtOld(obs)
+	    labelTabels(obs).sitAtOld(p,discount)
+	    oldT/(_oCount-1+concentration)
 	  } else {
 	    labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
 	    base.update(obs)
 	    _tCount+=1
 	    newT
-		//_seatAtNew(obs)
 	  }
-     }
-     case MINPATH => if (_pSitAtOld(obs)==0) {
-       labelTabels(obs).sitAtNew
-       _pSitAtNew(obs)}
-    			//		_seatAtNew(obs)
-    				else {
-    				  labelTabels(obs).sitAtOld(0, discount)
-    				  _pSitAtOld(obs)}
-    					//_seatAtOld(obs)
+     case MINPATH => 
+       if (_pSitAtOld(obs)==0) { 
+         labelTabels(obs).sitAtNew
+         _pSitAtNew(obs)
+       } else {
+    	 labelTabels(obs).sitAtOld(0, discount)
+    	 _pSitAtOld(obs)
+       }
      case MAXPATH => 
        labelTabels(obs).sitAtNew
-       _pSitAtNew(obs) //_seatAtNew(obs)
+       _pSitAtNew(obs)
     } 
   }
   
@@ -277,7 +223,8 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   def remove (obs: T) = {
     val counts = labelTabels(obs)
     _oCount-=1
-    if (labelTabels(obs).remove(_random.nextInt(counts.nCust))==0) {
+    val r = (_random.nextDouble*counts.nCust).toInt
+    if (labelTabels(obs).remove(r)==0) {
       base.remove(obs)
       _tCount-=1
       if (counts.isEmpty)
@@ -287,63 +234,7 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       0
     }
   }
- /*   
-  /**
-   * remove from a table with probability proportional to its size
-   * 
-   *   ==> remove from any of the n tables with m customers with probability proportional to n*m
-   *   ==> denominator is total number of customers of type obs
-   */
-  def remove (obs: T): Double = {
-	def inner(seating: HashMap[Int,Int],r: Double,current: Int=0): Unit = 
-      if (seating.isEmpty)
-        throw new Error("Couldn't remove from "+obs)
-      else {
-        val (tableSize,nTables) = seating.head
-        if (r<current+tableSize*nTables) {
-          if (CRP.removeFrom(hmTables(obs),tableSize)) {
-            _tCount -=1
-            val nObsTables = hmTableCounts(obs)-1
-            if (nObsTables==0)
-              hmTableCounts.remove(obs)
-            else
-              hmTableCounts(obs)=nObsTables
-            base.remove(obs)
-          }
-          if (hmTables(obs).isEmpty)
-            hmTables.remove(obs)
-        }
-        else
-          inner(seating.tail,r,current+tableSize*nTables)
-      }
-	def _inner(seating: HashMap[Int,Int],r: Double): Unit = 
-      if (seating.isEmpty)
-        throw new Error("Couldn't remove from "+obs)
-      else {
-        val (tableSize,nTables) = seating.head
-        if (r-tableSize*nTables<=0) {
-          if (CRP.removeFrom(hmTables(obs),tableSize)) {
-            _tCount -=1
-            val nObsTables = hmTableCounts(obs)-1
-            if (nObsTables==0)
-              hmTableCounts.remove(obs)
-            else
-              hmTableCounts(obs)=nObsTables
-            base.remove(obs)
-          }
-          if (hmTables(obs).isEmpty)
-            hmTables.remove(obs)
-        }
-        else
-          _inner(seating.tail,r-tableSize*nTables)
-      }
-//    inner(hmTables(obs),_random.nextInt(_oCount(obs)))
-	inner(hmTables(obs),_random.nextDouble*_oCount(obs))
-    Utils.decr(hmObsCounts,obs)
-    _oCount-=1
-    predProb(obs)
-  }
-*/  
+
   def _logProbSeatingByConc: (Double => Double) = 
     _logProbSeating(_: Double, discount)
   

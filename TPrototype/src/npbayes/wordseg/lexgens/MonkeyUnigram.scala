@@ -4,11 +4,10 @@ import npbayes.distributions.PosteriorPredictive
 import npbayes.wordseg.data.WordType
 
 /**
- * Monkey-Generator for both Unigram and Bigram model
- * the Unigram generator sets UB to zero
+ * Monkey-Generator for the Unigram model
  * @author bborschi
  *
- * @param <T>
+ * 
  */
 class MonkeyUnigram(val nPhones: Int, val pStop: Double) extends PosteriorPredictive[WordType] {
   val _pPhon: Double = 1.0/nPhones

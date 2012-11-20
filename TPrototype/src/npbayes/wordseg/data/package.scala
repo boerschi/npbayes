@@ -4,6 +4,16 @@ import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableList.Builder
 import com.google.common.collect.HashBiMap
 
+class Result(val tp: Double,val tr: Double, val bp: Double, val br: Double, val lp: Double, val lr: Double) {
+  val tf = 2*tp*tr/(tp+tr)
+  val bf = 2*bp*br/(bp+br)
+  val lf = 2*lp*lr/(lp+lr)
+  
+  override def toString =
+    tp+" "+tr+" "+tf+" "+bp+" "+br+" "+bf
+} 
+
+
 object SymbolTable {
   val mappingStringToSeg = HashBiMap.create[String,SegmentType]()
   def mappingSegToString = mappingStringToSeg.inverse
