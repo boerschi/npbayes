@@ -29,7 +29,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
-	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5))//,assumption)
+	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	var nUtterances = 0
 	var lost: Histogram =new Histogram
 	var changed = 0

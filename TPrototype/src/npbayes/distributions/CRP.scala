@@ -29,8 +29,8 @@ case object MAXPATH extends HEURISTIC
 class TypeCount {
   var nCust = 0
   var nTables = 0
-  val nCust_nTables: HashMap[Int,Int] = new HashMap
-  //val nCust_nTables: TreeMap[Int,Int] = new TreeMap
+//  val nCust_nTables: HashMap[Int,Int] = new HashMap
+  val nCust_nTables: TreeMap[Int,Int] = new TreeMap
   
   def isEmpty: Boolean =
     nCust==0 && nTables==0
@@ -55,7 +55,7 @@ class TypeCount {
   
   def sitAtOld(r: Double, discount: Double): Unit = {
 	def inner(tables: Iterator[(Int,Int)],current: Double): Unit = 
-      if (tables.isEmpty)
+     if (tables.isEmpty)
         throw new Error("Couldn't add to table")
       else {
         val (tableSize: Int,nTables: Int) = tables.next
@@ -80,7 +80,7 @@ class TypeCount {
         throw new Error("Couldn't remove")
       else {
         val (tableSize,nTs) = tables.next
-        if (r<current+tableSize*nTs) {
+        if (r<=current+tableSize*nTs) {
           val n1 = tableSize-1 //one more table of this size
           if (nTs-1 == 0)
             nCust_nTables.remove(tableSize)
@@ -203,16 +203,27 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
 	    newT
 	  }
      case MINPATH => 
-       if (_pSitAtOld(obs)==0) { 
-         labelTabels(obs).sitAtNew
+       if (_oCount(obs)==0) { 
+         labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
+    	    base.update(obs)
+
+         _tCount += 1
+         _oCount+=1
          _pSitAtNew(obs)
        } else {
+         val res = _pSitAtOld(obs)
+         _oCount+=1
     	 labelTabels(obs).sitAtOld(0, discount)
-    	 _pSitAtOld(obs)
+    	 res
        }
-     case MAXPATH => 
-       labelTabels(obs).sitAtNew
-       _pSitAtNew(obs)
+     case MAXPATH =>
+       val res = _pSitAtNew(obs)
+       	    base.update(obs)
+
+       labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
+         _tCount += 1
+         _oCount += 1
+       res
     } 
   }
   

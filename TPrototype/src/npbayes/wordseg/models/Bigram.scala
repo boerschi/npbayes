@@ -29,10 +29,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
 	val pypUni = 
-	  new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.2,data.UBOUNDARYWORD,0.5))//,EXACT)
-
+    new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5),assumption)
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
-
+ 
 
 	val debugCounts: HashMap[WordType,HashMap[WordType,Int]] = new HashMap
 	
@@ -40,7 +39,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def nTokens = pypUni._oCount
 
 	def update(precedingW: WordType, word: WordType): Double = {
-	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni)).update(word)
+	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)).update(word)
 	}
 
 	def removeWrap(precedingW: WordType, word: WordType) = {
