@@ -6,8 +6,10 @@ import scala.collection.mutable.WeakHashMap
 import npbayes.utils.Utils
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.LinkedList
-import scala.collection.JavaConversions._
+//import scala.collection.JavaConversions._
 import java.util.TreeMap
+import java.util.Map.{Entry => JEntry}
+import java.util.{Iterator => JIterator}
 
 import npbayes.wordseg._
 
@@ -29,7 +31,12 @@ case object MAXPATH extends HEURISTIC
 class TypeCount {
   var nCust = 0
   var nTables = 0
-//  val nCust_nTables: HashMap[Int,Int] = new HashMap
+  /**
+   * without the ordering, the seating arrangments don't seem to be sampled properly
+   * val nCust_nTables: HashMap[Int,Int] = new HashMap
+   * hence use a tree map
+   */
+  
   val nCust_nTables: TreeMap[Int,Int] = new TreeMap
   
   def isEmpty: Boolean =
@@ -38,10 +45,16 @@ class TypeCount {
   def sanity: Boolean = {
     var nn = 0
     var mm = 0
-    for ((nC,nT) <- nCust_nTables) {
+    val entries : JIterator[JEntry[Int, Int]] = nCust_nTables.entrySet().iterator
+    while (entries.hasNext()) {
+    	val entry: JEntry[Int,Int] = entries.next();
+    	nn += entry.getKey()*entry.getValue()
+    	mm += entry.getValue()
+    }
+    /*for ((nC,nT) <- nCust_nTables) {
       nn += nC*nT
       mm += nT
-    }
+    }*/
     assert(nn==nCust)
     assert(mm==nTables)
     nn==nCust && mm==nTables
@@ -50,52 +63,77 @@ class TypeCount {
   def sitAtNew = {
     nCust+=1
     nTables+=1
-    nCust_nTables(1) = nCust_nTables.getOrElse(1,0)+1 
+    Option(nCust_nTables.get(1)) match {
+      case Some(x) =>
+        nCust_nTables.put(1,x+1)
+      case None =>
+        nCust_nTables.put(1, 1)
+    }
+//    nCust_nTables(1) = nCust_nTables.getOrElse(1,0)+1 
   }
   
   def sitAtOld(r: Double, discount: Double): Unit = {
-	def inner(tables: Iterator[(Int,Int)],current: Double): Unit = 
-     if (tables.isEmpty)
+	def inner(tables: JIterator[JEntry[Int,Int]],current: Double): Unit = 
+     if (!tables.hasNext())
         throw new Error("Couldn't add to table")
       else {
-        val (tableSize: Int,nTables: Int) = tables.next
+//        val (tableSize: Int,nTables: Int) = tables.next
+        val entry = tables.next()
+        val tableSize = entry.getKey()
+        val nTables = entry.getValue()
         if (current-(tableSize-discount)*nTables<=0) {        
           val n1 = tableSize+1 //one more table with that many customers
           if (nTables-1==0) //no more tables of this size
             nCust_nTables.remove(tableSize)
           else
-            nCust_nTables(tableSize)-=1
-          nCust_nTables(n1) = nCust_nTables.getOrElse(n1, 0)+1 
+            nCust_nTables.put(tableSize,nTables-1)
+          val old = Option(nCust_nTables.get(n1))
+          old match {
+            case Some(x) =>
+              nCust_nTables.put(n1, x+1)
+            case None =>
+              nCust_nTables.put(n1, 1)
+          }
+            //nCust_nTables(n1) = nCust_nTables.getOrElse(n1, 0)+1
         }
         else
           inner(tables,current-(tableSize-discount)*nTables)
       }
-	inner(nCust_nTables.iterator,r)
+	inner(nCust_nTables.entrySet.iterator,r)
     nCust+=1
   }
   
   def remove(r: Int): Int = {
-	def inner(tables: Iterator[(Int,Int)],current: Int=0): Int = 
-      if (tables.isEmpty)
+	def inner(tables: JIterator[JEntry[Int,Int]],current: Int=0): Int = 
+      if (!tables.hasNext)
         throw new Error("Couldn't remove")
       else {
-        val (tableSize,nTs) = tables.next
+        val entry = tables.next
+        val tableSize = entry.getKey()
+        val nTs = entry.getValue()
+//        val (tableSize,nTs) = tables.next
         if (r<=current+tableSize*nTs) {
           val n1 = tableSize-1 //one more table of this size
           if (nTs-1 == 0)
             nCust_nTables.remove(tableSize)
           else
-            nCust_nTables(tableSize)-=1
+            nCust_nTables.put(tableSize,nCust_nTables.get(tableSize)-1)
           if (n1==0) //one less table
             nTables-=1
-          else
-            nCust_nTables(n1) = nCust_nTables.getOrElse(n1,0)+1
+          else {
+            Option(nCust_nTables.get(n1)) match {
+              case Some(x) =>
+                nCust_nTables.put(n1, x+1)
+              case None =>
+                nCust_nTables.put(n1, 1)
+            }
+          }
           nCust-=1
           n1
         } else
           inner(tables, current+tableSize*nTs)
       }
-	inner(nCust_nTables.iterator,0)
+	inner(nCust_nTables.entrySet.iterator,0)
   }
 }
 
@@ -165,9 +203,17 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   def _logProbSeating(concentration: Double, discount: Double): Double = {
     //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
     var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
-    for (tokenCount <- labelTabels.values)
-      for ((nC,nT) <- tokenCount.nCust_nTables)
-    	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
+    for (tokenCount <- labelTabels.values) {
+      val iter : JIterator[JEntry[Int,Int]] = tokenCount.nCust_nTables.entrySet().iterator()
+      while (iter.hasNext()) {
+        val entry = iter.next()
+        val nC = entry.getKey()
+        val nT = entry.getValue()
+        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
+      }
+/*      for ((nC,nT) <- tokenCount.nCust_nTables)
+    	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT*/
+    }
     if (discount==0)
       res += _tCount*math.log(concentration)
     else
@@ -195,11 +241,13 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       _oCount+=1
 	  if (p < oldT) {
 	    labelTabels(obs).sitAtOld(p,discount)
+	    //assert(sanityCheck)
 	    oldT/(_oCount-1+concentration)
 	  } else {
 	    labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
 	    base.update(obs)
 	    _tCount+=1
+	    //assert(sanityCheck)
 	    newT
 	  }
      case MINPATH => 
