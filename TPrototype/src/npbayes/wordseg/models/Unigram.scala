@@ -8,7 +8,6 @@ import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
-import npbayes.utils.Histogram
 import npbayes.wordseg.`package`
 
 
@@ -23,19 +22,21 @@ case class UnigramMedialContext(val w1O: WordType, val w1U: WordType, val w1D: W
 case class UnigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordType) extends UContext					  
 					  
 
-class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val assumption: HEURISTIC = EXACT,val dropProb: Double =0.0) {
+class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0) extends WordsegModel {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0
-	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
+	val data = new VarData(corpusName,dropProb,dropInd,dropSeg)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	var nUtterances = 0
-	var lost: Histogram =new Histogram
 	var changed = 0
 	var boundToNo = 0
 	var noToBound = 0
 	
+	
+	def evaluate =
+	  data.evaluate.toString
 	
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
@@ -94,6 +95,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  res
 	}	
 	
+	def sanity =
+	  pypUni.sanityCheck
 	
 	/**
 	 * context utterance medial ==> w1, w2, w1w2, isFinal-information
@@ -207,25 +210,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	b match {
 	    	  case NoBoundary => 
 	    	    update(w1w2U)
-	    	    if (hasChanged) {
-	    	      changed+=1
-	    	      boundToNo+=1
-	    	      lost.incr((w1O,w2O))
-	    	    }
 	    	  case WBoundaryDrop => 
 	    	    update(w1D)
 	    	    update(w2U)
-	    	    if (hasChanged) {
-	    	      changed+=1
-	    	      noToBound+=1
-	    	    }
 	    	  case WBoundaryNodrop =>
 	    	    update(w1O)
-	    	    update(w2U)
-	    	    if (hasChanged) {
-	    	      changed+=1
-	    	      noToBound+=1
-	    	    }	    	    
+	    	    update(w2U)    
 	    	}
 	    	if (isFinal) nUtterances+=1
 	    case UnigramFinalContext(w1O,w1U,w1D) =>

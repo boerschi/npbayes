@@ -1,9 +1,59 @@
-package npbayes.utils
+package npbayes
 /**
  * convenience functions
  */
 
 import scala.collection.mutable.HashMap
+
+/**
+ * Jason Naradowsky's Argument parser
+ */
+class ArgParser(argArray: Array[String]) {
+	
+	var args = argArray
+	
+	def contains(str: String): Boolean = args.contains(str)
+	
+	def getInt(arg: String): Int = getString(arg).toInt
+
+	def getInt(arg: String, default: Int): Int = getString(arg, default.toString).toInt
+	
+	def getDouble(arg: String): Double = getString(arg).toDouble
+
+	def getDouble(arg: String, default: Double): Double = getString(arg, default.toString).toDouble
+	
+	def getString(arg: String): String = getString(arg, null.asInstanceOf[String])	
+	
+	def getString(arg: String, default: String): String = {
+		if (args.contains(arg)) {
+			return args(args.indexOf(arg)+1)
+		}
+		else {
+			return default
+		}
+	}	
+	
+	def getBoolean(arg: String, default: Boolean=false): Boolean = {
+		if (args.contains(arg)) {
+			return args(args.indexOf(arg)+1).toLowerCase == "true"
+		}
+		else {
+			return default
+		}			
+	}
+	
+	override def toString = {
+	  val res: StringBuffer = new StringBuffer
+	  for (i <- 0 until argArray.length by 2)
+	    res.append(argArray(i)+" => "+argArray(i+1)+"\n")
+	  res.toString
+	}
+	  
+	
+	def addOption(arg: String, value: String) = {
+	  args = (Array(arg, value) ++ args)
+	}
+}
 
 class Histogram {
   val counts: HashMap[Any,Int] = new HashMap

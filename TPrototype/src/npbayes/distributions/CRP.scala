@@ -3,7 +3,7 @@ package npbayes.distributions
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.collection.mutable.WeakHashMap
-import npbayes.utils.Utils
+import npbayes.Utils 
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.LinkedList
 //import scala.collection.JavaConversions._

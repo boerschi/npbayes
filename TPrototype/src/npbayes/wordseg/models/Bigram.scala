@@ -6,7 +6,7 @@ import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
 import scala.collection.mutable.HashMap
-import npbayes.utils.Histogram
+import java.io.PrintStream
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
@@ -24,10 +24,11 @@ object Bigram {
   val FAITHFUL = false
 }
 
-class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val assumption: HEURISTIC = EXACT,val dropProb: Double =0.0) {
+class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
+    		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
-	val data = new VarData(corpusName,dropProb,"KRLK","KLRK")
+	val data = new VarData(corpusName,dropProb,dropInd,dropSeg)
 	val pypUni = 
     new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5),assumption)
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
@@ -37,6 +38,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
+	
+	def evaluate =
+	  data.evaluate.toString
 
 	def update(precedingW: WordType, word: WordType): Double = {
 	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)).update(word)
@@ -175,9 +179,12 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def _calcMedialHypotheses(context: BigramMedialContext): Categorical[Boundary] = {
 	  val res: Categorical[Boundary] = new Categorical
 	  res.add(NoBoundary,
-	      _noBoundary(context.leftU,context.w1w2U,context.w1w2O,context.rightU))
+	      _noBoundary(context.leftU,context.w1w2U,context.w1w2O,context.rightU))	 
 	  res.add(WBoundaryDrop,
 	      _boundary(context.leftU,context.w1D,context.w2U,context.w1O,context.w2O,context.rightU))
+	  if (res.outcomes.last._2>0)
+	    println("Hallo")
+	    
 	  res.add(WBoundaryNodrop,
 	      _boundary(context.leftU,context.w1O,context.w2U,context.w1O,context.w2O,context.rightU))
 	  assert(res.partition>0)
