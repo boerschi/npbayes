@@ -69,11 +69,12 @@ object wordseg {
 	   
 	  model.init(options.GOLDINIT)
 	  println(options)
+	  println(0+" "+1+" "+model.logProb+" "+model.evaluate)
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
 	    sample(1/temperature)
 	    println(i+" "+temperature+" "+model.logProb+" "+model.evaluate)
 	  }
-//	 model.writeAnalysis(new java.io.PrintStream(options.OUTPUT))
+	  model.writeAnalysis(new java.io.PrintStream(new java.io.File(options.OUTPUT)))
 	}
 }

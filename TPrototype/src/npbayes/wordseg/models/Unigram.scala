@@ -61,7 +61,39 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	/**
 	 * initializes the CRP with the counts
 	 */
-	def init(gold:Boolean = false) = {
+	def init(gold:Boolean = false, goldType:Boolean = false) = {
+	  def ungoldType(bounds: Array[Boundary], pos: Int): Unit = {
+	     if (pos==bounds.size)
+	      Unit
+	    else {
+	      bounds(pos) match {
+	      	case UBoundaryDrop | UBoundaryNodrop => 
+	      	  if (data._random.nextDouble<=data.dropProb)
+	      		  bounds(pos)=UBoundaryDrop
+	      	  else
+	      		   bounds(pos)=UBoundaryNodrop
+	      	case WBoundaryDrop | WBoundaryNodrop => 
+	      	  if (data._random.nextDouble<=data.dropProb)
+	      	    bounds(pos)=WBoundaryDrop
+	      	  else
+	      	    bounds(pos)=WBoundaryNodrop
+	      	case _ =>
+	      }
+	      undrop(bounds,pos+1)
+	    }
+	  }
+	  def undrop(data: Array[Boundary], pos: Int): Unit = {
+	    if (pos==data.size)
+	      Unit
+	    else {
+	      data(pos) match {
+	      	case UBoundaryDrop => data(pos)=UBoundaryNodrop
+	      	case WBoundaryDrop => data(pos)=WBoundaryNodrop
+	      	case _ =>
+	      }
+	      undrop(data,pos+1)
+	    }
+	  }	  
 	  def inner(sPos: Int,cPos: Int): Unit = 
 	    if (cPos>=boundaries.length)
 	      Unit
@@ -89,6 +121,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  }
 	  if (gold)
 	    data.boundaries=data.goldBoundaries.clone
+	  if (!goldType)
+	    ungoldType(data.boundaries, 0)
+	  if (data.dropProb==0)
+	    undrop(data.boundaries, 0)
 	  val res = inner(1,1)
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)

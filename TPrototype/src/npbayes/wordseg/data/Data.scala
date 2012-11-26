@@ -211,6 +211,9 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		var totalTokens = 0;		//tokens the learner predicts
 		var trueTokens = 0;			//tokens in the gold
 		var correctTokens = 0;		//tokens the learner gets correct
+		var totalDrops = 0;
+		var trueDrops = 0;
+		var correctDrops = 0;
 //		HashMap<ImmutableList<Short>,Integer> proposedLexicon = new HashMap<ImmutableList<Short>,Integer>();	//words in the proposed segmentation
 //		ashMap<ImmutableList<Short>,Integer> trueLexicon = new HashMap<ImmutableList<Short>, Integer>();		//words in the true segmentation
 		var trueStartPos=0
@@ -219,14 +222,39 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		  boundaries(i) match {
 		    case NoBoundary => {
 		      goldBoundaries(i) match {
-		        case WBoundaryDrop | WBoundaryNodrop =>
+		        case WBoundaryDrop =>
 		          trueBoundaries+=1
 		          trueTokens+=1
 		          trueStartPos=i
+		          trueDrops+=1
+		        case WBoundaryNodrop =>
+		          trueBoundaries+=1
+		          trueTokens+=1
+		          trueStartPos=i		          
 		        case _ =>
 		      }
 		    }
-		    case WBoundaryDrop | WBoundaryNodrop => {
+		    case WBoundaryDrop => {
+		      totalBoundaries+=1
+		      totalTokens+=1
+		      totalDrops+=1
+		      goldBoundaries(i) match {
+		        case WBoundaryDrop | WBoundaryNodrop => {
+		          trueBoundaries+=1
+		          correctBoundaries+=1
+		          trueTokens+=1
+		          if (predStartPos==trueStartPos) correctTokens+=1
+		          trueStartPos=i
+		          if (goldBoundaries(i)==WBoundaryDrop) {
+		            trueDrops+=1
+		            correctDrops+=1
+		          }
+		        }
+		        case _ =>
+		      }
+		      predStartPos=i
+		    }
+		    case WBoundaryNodrop => {
 		      totalBoundaries+=1
 		      totalTokens+=1
 		      goldBoundaries(i) match {
@@ -236,6 +264,9 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		          trueTokens+=1
 		          if (predStartPos==trueStartPos) correctTokens+=1
 		          trueStartPos=i
+		          if (goldBoundaries(i)==WBoundaryDrop) {
+		            trueDrops+=1
+		          }		          
 		        }
 		        case _ =>
 		      }
@@ -244,6 +275,11 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		    case UBoundaryDrop | UBoundaryNodrop => {
 		      totalTokens+=1
 		      trueTokens+=1
+		      if (boundaries(i)==UBoundaryDrop) totalDrops+=1
+		      if (goldBoundaries(i)==UBoundaryDrop) {
+		        trueDrops+=1
+		        correctDrops+= {if (goldBoundaries(i)==boundaries(i)) 1 else 0}
+		      }
 		      if (predStartPos==trueStartPos) correctTokens+=1
 		      predStartPos=i
 		      trueStartPos=i
@@ -252,7 +288,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		}
 		new Result(correctTokens.toFloat/totalTokens,correctTokens.toFloat/trueTokens,
 		           correctBoundaries.toFloat/totalBoundaries,correctBoundaries.toFloat/trueBoundaries,
-		           0,0)
+		           correctDrops.toFloat/totalDrops,correctDrops.toFloat/trueDrops)
 	}
 	
 }

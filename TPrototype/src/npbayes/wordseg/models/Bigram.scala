@@ -106,7 +106,39 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	/**
 	 * initializes the CRP with the counts
 	 */
-	def init(gold:Boolean = false) = {
+	def init(goldBoundaries:Boolean = false, goldTypes:Boolean = false) = {
+	  def ungoldType(bounds: Array[Boundary], pos: Int): Unit = {
+	     if (pos==bounds.size)
+	      Unit
+	    else {
+	      bounds(pos) match {
+	      	case UBoundaryDrop | UBoundaryNodrop => 
+	      	  if (data._random.nextDouble<=data.dropProb)
+	      		  bounds(pos)=UBoundaryDrop
+	      	  else
+	      		   bounds(pos)=UBoundaryNodrop
+	      	case WBoundaryDrop | WBoundaryNodrop => 
+	      	  if (data._random.nextDouble<=data.dropProb)
+	      	    bounds(pos)=WBoundaryDrop
+	      	  else
+	      	    bounds(pos)=WBoundaryNodrop
+	      	case _ =>
+	      }
+	      undrop(bounds,pos+1)
+	    }
+	  }
+	  def undrop(data: Array[Boundary], pos: Int): Unit = {
+	    if (pos==data.size)
+	      Unit
+	    else {
+	      data(pos) match {
+	      	case UBoundaryDrop => data(pos)=UBoundaryNodrop
+	      	case WBoundaryDrop => data(pos)=WBoundaryNodrop
+	      	case _ =>
+	      }
+	      undrop(data,pos+1)
+	    }
+	  }
 	  def inner(sPos: Int,cPos: Int): Unit = 
 	    if (cPos>=boundaries.length)
 	      Unit
@@ -125,8 +157,13 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      	  inner(cPos+1,cPos+1)
 	      	}
 	  }
-	  if (gold)
+	  if (goldBoundaries)
 	    data.boundaries=data.goldBoundaries.clone
+	  if (!goldTypes)
+	    ungoldType(data.boundaries, 0)
+	  /** make sure no drops if prob=0 **/
+	  if (data.dropProb==0)
+	    undrop(data.boundaries, 0)
 	  inner(1,1)
 	}	
 	
@@ -181,10 +218,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  res.add(NoBoundary,
 	      _noBoundary(context.leftU,context.w1w2U,context.w1w2O,context.rightU))	 
 	  res.add(WBoundaryDrop,
-	      _boundary(context.leftU,context.w1D,context.w2U,context.w1O,context.w2O,context.rightU))
-	  if (res.outcomes.last._2>0)
-	    println("Hallo")
-	    
+	      _boundary(context.leftU,context.w1D,context.w2U,context.w1O,context.w2O,context.rightU))	    
 	  res.add(WBoundaryNodrop,
 	      _boundary(context.leftU,context.w1O,context.w2U,context.w1O,context.w2O,context.rightU))
 	  assert(res.partition>0)
@@ -296,20 +330,29 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	    removeAssociatedObservations(context, boundaries(pos))
 	    context match {
 	    	case BigramMedialContext(leftU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rightO,rightU) =>
-	    		removeWrap(leftU,w1U)
-	    		removeWrap(w1U,w2U)
-	    		removeWrap(w2U,rightU)
-	    		update(leftU,w1U)
-	    		update(w1U,w2U)
-	    		update(w2U,rightU)
+	    	  val res = __reseatProbs(leftU, w1D, w1O, w2U, w2O, rightU)
+	    	  updateBoundary(pos, res.sample(anneal), context)
 	    	case BigramFinalContext(leftU,wO,wU,wD) =>
-	    	  removeWrap(leftU,wU)
-	    	  removeWrap(wU,data.UBOUNDARYWORD)
-	    	  update(leftU,wU)
-	    	  update(wU,data.UBOUNDARYWORD)
+	    	  val res = __reseatProbs(leftU,wD,wO)
+	    	  updateBoundary(pos,res.sample(anneal), context)
 	  }	      
 	  }
 
+	}
+
+	def __reseatProbs(leftU: WordType, w1U: WordType, w1O: WordType): Categorical[Boundary] = {
+	  val res = new Categorical[Boundary]
+	  res.add(UBoundaryDrop, predictive(leftU, w1U)*predictive(w1U, data.UBOUNDARYWORD)*toSurface(w1U, w1O))
+	  res.add(UBoundaryNodrop, predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
+	  res
+	}
+	def __reseatProbs(leftU: WordType, w1U: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[Boundary] = {
+	  val res = new Categorical[Boundary]
+	  res.add(WBoundaryDrop, predictive(leftU, w1U)*predictive(w1U, w2U)*toSurface(w1U, w1O)*
+			  				 predictive(w2U,rightU)*toSurface(w2U,w2O))
+	  res.add(WBoundaryNodrop, predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O)*
+			  				 predictive(w2U,rightU)*toSurface(w2U,w2O))
+	  res
 	}
 	
 	/**

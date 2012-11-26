@@ -4,13 +4,13 @@ import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableList.Builder
 import com.google.common.collect.HashBiMap
 
-class Result(val tp: Double,val tr: Double, val bp: Double, val br: Double, val lp: Double, val lr: Double) {
+class Result(val tp: Double,val tr: Double, val bp: Double, val br: Double, val dp: Double, val dr: Double) {
   val tf = 2*tp*tr/(tp+tr)
   val bf = 2*bp*br/(bp+br)
-  val lf = 2*lp*lr/(lp+lr)
+  val df = 2*dp*dr/(dp+dr)
   
   override def toString =
-    tp+" "+tr+" "+tf+" "+bp+" "+br+" "+bf
+    "P "+tp+" R "+tr+" F "+tf+" BP "+bp+" BR "+br+" BF "+bf+" DP "+dp+" DR "+dr+" DF "+df
 } 
 
 
