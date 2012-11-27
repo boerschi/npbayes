@@ -176,7 +176,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  inner(1,1,new StringBuilder)
 	}
 	
-	def printAnalysis(out: PrintStream = System.out) = {
+	def printAnalysis(out: PrintStream = System.out,sep: String=" ") = {
 	  def inner(sPos: Int,cPos: Int): Unit = 
 	    if (cPos>=boundaries.size)
 	      Unit
@@ -185,11 +185,11 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	      	case NoBoundary => inner(sPos,cPos+1)
 	      	case WBoundaryDrop => {
  	      	  out.print(
- 	      	      wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"::")
+ 	      	      wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+sep)
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case WBoundaryNodrop => {
- 	      	  out.print(wToS(data.subList(sPos-1, cPos))+"::")
+ 	      	  out.print(wToS(data.subList(sPos-1, cPos))+sep)
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundaryDrop => {
@@ -243,7 +243,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		          trueBoundaries+=1
 		          correctBoundaries+=1
 		          trueTokens+=1
-		          if (predStartPos==trueStartPos) correctTokens+=1
+		          if (predStartPos==trueStartPos && goldBoundaries(i)==boundaries(i)) correctTokens+=1
 		          trueStartPos=i
 		          if (goldBoundaries(i)==WBoundaryDrop) {
 		            trueDrops+=1
@@ -280,7 +280,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		        trueDrops+=1
 		        correctDrops+= {if (goldBoundaries(i)==boundaries(i)) 1 else 0}
 		      }
-		      if (predStartPos==trueStartPos) correctTokens+=1
+		      if (predStartPos==trueStartPos  && goldBoundaries(i)==boundaries(i)) correctTokens+=1
 		      predStartPos=i
 		      trueStartPos=i
 		    }

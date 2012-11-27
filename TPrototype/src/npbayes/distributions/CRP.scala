@@ -72,8 +72,8 @@ class TypeCount {
 //    nCust_nTables(1) = nCust_nTables.getOrElse(1,0)+1 
   }
   
-  def sitAtOld(r: Double, discount: Double): Unit = {
-	def inner(tables: JIterator[JEntry[Int,Int]],current: Double): Unit = 
+  def sitAtOld(r: Double, discount: Double): Int = {
+	def inner(tables: JIterator[JEntry[Int,Int]],current: Double): Int = 
      if (!tables.hasNext())
         throw new Error("Couldn't add to table")
       else {
@@ -94,13 +94,14 @@ class TypeCount {
             case None =>
               nCust_nTables.put(n1, 1)
           }
-            //nCust_nTables(n1) = nCust_nTables.getOrElse(n1, 0)+1
+          tableSize //we sit at this table
         }
         else
           inner(tables,current-(tableSize-discount)*nTables)
       }
-	inner(nCust_nTables.entrySet.iterator,r)
+	val res = inner(nCust_nTables.entrySet.iterator,r)
     nCust+=1
+    res
   }
   
   def remove(r: Int): Int = {
@@ -240,15 +241,16 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       val p = _random.nextDouble*(oldT+newT)
       _oCount+=1
 	  if (p < oldT) {
-	    labelTabels(obs).sitAtOld(p,discount)
+	    val nCust = labelTabels(obs).sitAtOld(p,discount)
 	    //assert(sanityCheck)
-	    oldT/(_oCount-1+concentration)
+//	    oldT/(_oCount-1+concentration)
+	    nCust/(_oCount-1+concentration)
 	  } else {
 	    labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
-	    base.update(obs)
+	    val mProb = base.update(obs)
 	    _tCount+=1
 	    //assert(sanityCheck)
-	    newT
+	    concentration*mProb/(_oCount-1+concentration)
 	  }
      case MINPATH => 
        if (_oCount(obs)==0) { 
@@ -278,19 +280,26 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   def predProb(obs: T) = {
 	  _pSitAtOld(obs)+_pSitAtNew(obs)    
   }
-	
+
+  /**
+   * 
+   * @param obs
+   * @return	probability of adding this observation back in
+   */
   def remove (obs: T) = {
     val counts = labelTabels(obs)
     _oCount-=1
     val r = (_random.nextDouble*counts.nCust).toInt
-    if (labelTabels(obs).remove(r)==0) {
-      base.remove(obs)
+    val remCusts = labelTabels(obs).remove(r)
+    if (remCusts==0) {
+      val pProb = base.remove(obs)
       _tCount-=1
       if (counts.isEmpty)
         labelTabels.remove(obs)
-      0
+      //_pSitAtNew(obs)
+      concentration*pProb / (_oCount+concentration)
     } else {
-      0
+      (remCusts-discount)/(_oCount+concentration)
     }
   }
 
@@ -300,7 +309,17 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   def _logProbSeatingByDisc: (Double => Double) =
     _logProbSeating(concentration, _: Double)
     
-  
+  /**
+   * see the Teh tech-report
+   * 
+   * Gamma(alpha, beta)
+   * 
+   */
+  def sampleConcentration() = {
+    
+  }
+    
+    
   /**
    * tells you what the normalized probabilites of sitting down are
    */

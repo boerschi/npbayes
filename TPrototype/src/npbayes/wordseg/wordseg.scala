@@ -35,6 +35,8 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def ASSUMPTION = getString("--assumption","EXACT")
 	def GOLDINIT = getBoolean("--goldinit",false)
 	def MODE = getString("--mode","WORDSEG")
+	def BURNIN = getInt("--burnin",2000)
+	def SAMPLES = getInt("--sampleEvery",10)
 }
 
 object wordseg {
@@ -66,15 +68,24 @@ object wordseg {
 	    case "LANGMODEL" =>
 	      model.gibbsSweepWords(_)
 	  }
-	   
+	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"))
+	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"))
 	  model.init(options.GOLDINIT)
 	  println(options)
-	  println(0+" "+1+" "+model.logProb+" "+model.evaluate)
+	  traceFile.println(options)
+	  println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate)
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
 	    sample(1/temperature)
-	    println(i+" "+temperature+" "+model.logProb+" "+model.evaluate)
+	    val log = i+" "+temperature+" "+model.logProb+" "+model._logProbTrack+" "+" "+model.evaluate
+	    println(log); traceFile.println(log)
+	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
+	      model.writeAnalysis(sampleFile)
+	      sampleFile.println()
+	    }
 	  }
-	  model.writeAnalysis(new java.io.PrintStream(new java.io.File(options.OUTPUT)))
+	  model.writeAnalysis(new java.io.PrintStream(new java.io.File(options.OUTPUT+".out")))
+	  traceFile.close()
+	  sampleFile.close()
 	}
 }

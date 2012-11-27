@@ -7,6 +7,7 @@ import scala.collection.mutable.HashMap
 
 /**
  * Jason Naradowsky's Argument parser
+ * added a toString-method
  */
 class ArgParser(argArray: Array[String]) {
 	
@@ -45,7 +46,7 @@ class ArgParser(argArray: Array[String]) {
 	override def toString = {
 	  val res: StringBuffer = new StringBuffer
 	  for (i <- 0 until argArray.length by 2)
-	    res.append(argArray(i)+" => "+argArray(i+1)+"\n")
+	    res.append("# "+argArray(i)+" => "+argArray(i+1)+"\n")
 	  res.toString
 	}
 	  

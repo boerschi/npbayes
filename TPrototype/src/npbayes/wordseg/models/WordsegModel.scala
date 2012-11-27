@@ -10,6 +10,7 @@ abstract class WordsegModel {
 	def logProb: Double
 	def gibbsSweep(anneal: Double=1.0): Double
 	def evaluate: String
+	var _logProbTrack: Double = 0 // explicit logProb tracking
 	/**
 	 * only resample words, but determine drops
 	 */
