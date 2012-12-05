@@ -18,6 +18,15 @@ case object WBoundaryNodrop extends Boundary
 case object UBoundaryDrop extends Boundary
 case object UBoundaryNodrop extends Boundary
 
+class Identifier(f: String) {
+  var itemsT: Set[SegmentType] = Set[SegmentType]()
+  for (l <- scala.io.Source.fromFile(f).getLines)
+    itemsT = itemsT+SymbolTable(l)
+  
+  def apply(x: SegmentType): Boolean =
+    itemsT.contains(x)
+}
+
 
 
 /**
@@ -25,7 +34,10 @@ case object UBoundaryNodrop extends Boundary
  * keeps boundary information and provides word-extraction functionality
  */
 class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*", val DROPSYMBOL: String = "T") {
-	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
+	val isConsonant = new Identifier("/home/bborschi/git/TDropping/consonants.txt")
+ 	val isVowel = new Identifier("/home/bborschi/git/TDropping/vowels.txt")
+	val isPause = new Identifier("/home/bborschi/git/TDropping/silences.txt")	
+    val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
 	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
 	val DROPSEG=SymbolTable(DROPSYMBOL)
 	
@@ -79,7 +91,18 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		seqBoundaries
 	}
 	
-	def dropProb(s: WordType): Double = dropProb	//TODO - word-specific probabilities
+	def dropProb(s: WordType, context: SegmentType): Double = dropProb/* {
+	  if (isConsonant(context))
+	    0.36
+	  else
+	    if (isVowel(context))
+	      0.24
+	    else
+	      if (isPause(context))
+	        0.15
+	      else
+	        throw new Error("Unknown Segment "+SymbolTable(context))
+	}//dropProb	//TODO - word-specific probabilities  */
 	
 	
 	def setBoundary(pos: Int, b: Boundary): Unit = 
@@ -90,14 +113,15 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 * 
 	 * P(s|u), but read: probability of realizing u as s, hence the order
 	 */
-	def R(u: WordType, s: WordType): Double = {
+	def R(u: WordType, s: WordType, rWord: WordType): Double = {
 	  val res = SymbolTable(u.get(u.size-1)) match {
-	  case DROPSYMBOL => 
+	  case DROPSYMBOL =>
+	    val rContext = rWord.get(rWord.size()-1)
 	    if (u==s)
-	      (1-dropProb(u))
+	      (1-dropProb(u,rContext))
 	    else
 	      if (u.subList(0,u.size-1)==s)
-	        dropProb(u)
+	        dropProb(u,rContext)
 	      else
 	        0.0
 	  case _ =>
@@ -108,6 +132,8 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  }
 	  res
 	}
+	
+	
 	
 	
 	def _findBoundary(op: Int=>Int)(cPos: Int): Int = boundaries(cPos) match {

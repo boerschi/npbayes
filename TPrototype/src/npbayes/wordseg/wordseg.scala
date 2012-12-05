@@ -37,6 +37,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def MODE = getString("--mode","WORDSEG")
 	def BURNIN = getInt("--burnin",2000)
 	def SAMPLES = getInt("--sampleEvery",10)
+	def BOUNDINITPROB = getDouble("--boundinitProb",0.0)
 }
 
 object wordseg {
@@ -59,8 +60,8 @@ object wordseg {
 	      new Bigram(options.INPUT,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB)	      
 	  }
 	  
-	  def annealTemperature =
-	    npbayes.wordseg.annealTemperature(options.STARTTEMP, options.ANNEALITERS, 1)
+	  def annealTemperature(x: Int) = 	    //npbayes.wordseg.annealTemperature(x)
+		npbayes.wordseg.annealTemperature(options.STARTTEMP, options.ANNEALITERS, 1)(x)
 	  
 	  def sample = options.MODE match {
 	    case "WORDSEG" =>
@@ -70,7 +71,7 @@ object wordseg {
 	  }
 	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"))
 	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"))
-	  model.init(options.GOLDINIT)
+	  model.init(options.GOLDINIT,options.BOUNDINITPROB)
 	  println(options)
 	  traceFile.println(options)
 	  println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate)

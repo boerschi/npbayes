@@ -6,7 +6,7 @@ import npbayes.wordseg.data.VarData
 abstract class WordsegModel {
 	val data: VarData
 	def sanity: Boolean
-	def init(gold:Boolean = false, goldType:Boolean=false)
+	def init(gold:Boolean = false, goldType:Double=0.5)
 	def logProb: Double
 	def gibbsSweep(anneal: Double=1.0): Double
 	def evaluate: String

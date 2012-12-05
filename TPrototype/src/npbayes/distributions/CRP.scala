@@ -1,12 +1,13 @@
 package npbayes.distributions
-
+import npbayes.Utils
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.collection.mutable.WeakHashMap
-import npbayes.Utils 
-import org.apache.commons.math3.special.Gamma
+ 
+
 import scala.collection.mutable.LinkedList
-//import scala.collection.JavaConversions._
+
+import org.apache.commons.math3.special.Gamma
 import java.util.TreeMap
 import java.util.Map.{Entry => JEntry}
 import java.util.{Iterator => JIterator}
@@ -31,11 +32,6 @@ case object MAXPATH extends HEURISTIC
 class TypeCount {
   var nCust = 0
   var nTables = 0
-  /**
-   * without the ordering, the seating arrangments don't seem to be sampled properly
-   * val nCust_nTables: HashMap[Int,Int] = new HashMap
-   * hence use a tree map
-   */
   
   val nCust_nTables: TreeMap[Int,Int] = new TreeMap
   
@@ -51,10 +47,6 @@ class TypeCount {
     	nn += entry.getKey()*entry.getValue()
     	mm += entry.getValue()
     }
-    /*for ((nC,nT) <- nCust_nTables) {
-      nn += nC*nT
-      mm += nT
-    }*/
     assert(nn==nCust)
     assert(mm==nTables)
     nn==nCust && mm==nTables
@@ -69,7 +61,6 @@ class TypeCount {
       case None =>
         nCust_nTables.put(1, 1)
     }
-//    nCust_nTables(1) = nCust_nTables.getOrElse(1,0)+1 
   }
   
   def sitAtOld(r: Double, discount: Double): Int = {
@@ -77,7 +68,6 @@ class TypeCount {
      if (!tables.hasNext())
         throw new Error("Couldn't add to table")
       else {
-//        val (tableSize: Int,nTables: Int) = tables.next
         val entry = tables.next()
         val tableSize = entry.getKey()
         val nTables = entry.getValue()
@@ -112,7 +102,6 @@ class TypeCount {
         val entry = tables.next
         val tableSize = entry.getKey()
         val nTs = entry.getValue()
-//        val (tableSize,nTs) = tables.next
         if (r<=current+tableSize*nTs) {
           val n1 = tableSize-1 //one more table of this size
           if (nTs-1 == 0)
@@ -141,10 +130,6 @@ class TypeCount {
 class CRP[T](var concentration: Double, var discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
   val _random = new Random()
   
-/*  val hmObsCounts: HashMap[T,Int] = new HashMap() //overall-count
-  val hmTableCounts: HashMap[T,Int] = new HashMap() //maps each observation to the number of tables
-  val hmTables: HashMap[T,HashMap[Int,Int]] = new HashMap() //Goldwater-Style representation
-*/
   val labelTabels: HashMap[T,TypeCount] = new HashMap
   val emptyCount = new TypeCount
   
@@ -169,11 +154,6 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   }
   
     def sanityCheck: Boolean = {
-/*  	  _oCount==hmObsCounts.values.foldRight(0)(_+_) &&
-  	  _tCount==hmTableCounts.values.foldRight(0)(_+_) &&
-  	  {for ((obs,c) <- hmObsCounts.toList)
-  	     yield c==hmTables(obs).map(x=>x._1*x._2).sum && 
-  	     hmTableCounts(obs)==hmTables(obs).values.sum}.foldLeft(true)(_&&_)*/
       var nn=0
       var tt=0
       for ((word,counts) <- labelTabels.toList) {
