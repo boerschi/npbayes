@@ -37,7 +37,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def MODE = getString("--mode","WORDSEG")
 	def BURNIN = getInt("--burnin",2000)
 	def SAMPLES = getInt("--sampleEvery",10)
-	def BOUNDINITPROB = getDouble("--boundinitProb",0.0)
+	def BOUNDINITPROB = getDouble("--binitProb",0.0)
 }
 
 object wordseg {

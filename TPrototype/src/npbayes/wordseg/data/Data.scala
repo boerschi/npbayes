@@ -1,5 +1,10 @@
 package npbayes.wordseg.data
 
+/**
+ * we define a simple beta-prior over the application of each variation rule. consequently, we
+ * need to track the number of times with which we observed each individual rule applying / not applying
+ */
+
 import npbayes.distributions.CRP
 import java.io._
 import scala.collection.mutable.HashMap
@@ -91,17 +96,30 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		seqBoundaries
 	}
 	
-	def dropProb(s: WordType, context: SegmentType): Double = dropProb/* {
-	  if (isConsonant(context))
-	    0.36
-	  else
-	    if (isVowel(context))
-	      0.24
+	
+	def dropProb(s: WordType, rContext: SegmentType): Double = dropProb
+	
+	def dropProbContext(s: WordType, rContext: SegmentType): Double = /*dropProb*/ {
+	  val lContext = s.get(s.size()-2)
+	  if (isConsonant(rContext))
+	    if (isConsonant(lContext))
+	    	0.68
 	    else
-	      if (isPause(context))
-	        0.15
+	    	0.20
+	  else
+	    if (isVowel(rContext))
+	      if (isConsonant(lContext))
+	    	0.51
 	      else
-	        throw new Error("Unknown Segment "+SymbolTable(context))
+	        0.13
+	    else
+	      if (isPause(rContext))
+	        if (isConsonant(lContext))
+	        	0.44
+	        else
+	          0.06
+	      else
+	        throw new Error("Unknown Segment "+SymbolTable(rContext))
 	}//dropProb	//TODO - word-specific probabilities  */
 	
 	
